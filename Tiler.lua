@@ -7,6 +7,7 @@
 -- Commands:
 --   /tiler                    arrange all allowed windows
 --   /tiler debug              list every frame that would be tiled
+--   /tiler scan               list all visible candidate frames (allowed or not)
 --   /tiler allow  <name>      add a frame to the persistent allowlist
 --   /tiler remove <name>      remove a frame from the persistent allowlist
 --   /tiler list               show hardcoded + user-added allowlist
@@ -210,6 +211,40 @@ local function DebugFrames()
 end
 
 ------------------------------------------------------------------------
+-- Scan: list every visible, sizeable UIParent child regardless of allowlist
+------------------------------------------------------------------------
+local function ScanFrames()
+    local found = {}
+    for _, f in ipairs({ UIParent:GetChildren() }) do
+        local ok, name, w, h, x, y = pcall(function()
+            return f:GetName(),
+                   f:GetWidth()  or 0,
+                   f:GetHeight() or 0,
+                   f:GetLeft()   or 0,
+                   f:GetTop()    or 0
+        end)
+        if ok and name and f:IsVisible() and w >= MIN_WIDTH and h >= MIN_HEIGHT then
+            found[#found + 1] = { name = name, w = w, h = h, x = x, y = y }
+        end
+    end
+    table.sort(found, function(a, b) return a.name < b.name end)
+
+    if #found == 0 then
+        print("|cff00ff00Tiler:|r No visible candidate frames found.")
+        return
+    end
+    print("|cff00ff00Tiler:|r " .. #found .. " visible candidate frame"
+          .. (#found == 1 and "" or "s") .. "  (* = already allowed):")
+    for _, t in ipairs(found) do
+        local marker = IsAllowed(t.name) and "|cff00ff00*|r " or "  "
+        print(string.format("  %s%-40s %dx%d  at (%d,%d)",
+            marker, t.name,
+            math.floor(t.w), math.floor(t.h),
+            math.floor(t.x), math.floor(t.y)))
+    end
+end
+
+------------------------------------------------------------------------
 -- List the full effective allowlist
 ------------------------------------------------------------------------
 local function PrintAllowList()
@@ -325,6 +360,9 @@ SlashCmdList["TILER"] = function(msg)
     elseif cmd == "debug" then
         DebugFrames()
 
+    elseif cmd == "scan" then
+        ScanFrames()
+
     elseif cmd == "allow" then
         if arg == "" then
             print("|cff00ff00Tiler:|r Usage: /tiler allow <FrameName>")
@@ -346,6 +384,6 @@ SlashCmdList["TILER"] = function(msg)
         PrintAllowList()
 
     else
-        print("|cff00ff00Tiler:|r /tiler · /tiler debug · /tiler allow <name> · /tiler remove <name> · /tiler list")
+        print("|cff00ff00Tiler:|r /tiler · /tiler debug · /tiler scan · /tiler allow <name> · /tiler remove <name> · /tiler list")
     end
 end
