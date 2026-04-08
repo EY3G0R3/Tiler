@@ -53,6 +53,7 @@ local ALLOWED_NAMES = {
     BankFrame             = true,
     MailFrame             = true,
     MerchantFrame         = true,
+    ChannelFrame          = true,
     -- Addon windows
     SkilletFrame                               = true,
     Questie_BasseFrame                         = true,
