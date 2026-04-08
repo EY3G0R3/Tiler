@@ -1,256 +1,264 @@
 -- Tiler.lua
--- Automatic tiling window manager for WoW Classic Era.
+-- Dynamic tiling window manager for WoW Classic Era.
+-- Discovers all window-like frames at the time /tiler is typed and
+-- arranges them left-to-right (tops aligned, GAP px apart), wrapping
+-- to a new row when the strip would overflow the screen.
 --
--- When a managed window opens it is placed to the right of the rightmost
--- already-open managed window (tops aligned, GAP pixels apart).  If the
--- new window would overflow the right edge of the screen it wraps below
--- all open windows instead.
---
--- Slash command:  /tiler          → show current status
---                 /tiler on|off   → enable or disable
+-- Commands:
+--   /tiler                    arrange all discovered windows
+--   /tiler debug              list every frame that would be tiled
+--   /tiler ignore  <name>     exclude a frame from tiling permanently
+--   /tiler unignore <name>    stop ignoring a frame
+--   /tiler ignored            show the current ignore list
 
-local ADDON_NAME = ...
-
-------------------------------------------------------------------------
--- Configuration
-------------------------------------------------------------------------
-
-local GAP         = 12   -- horizontal gap between windows (px)
-local TOP_MARGIN  = 4    -- top of screen gap when no other window is open
-local LEFT_MARGIN = 4    -- left edge gap when wrapping to a new row
-
--- Frames that Tiler will auto-position when they become visible.
--- Any name whose global is nil at show-time is silently skipped.
-local MANAGED_NAMES = {
-    -- Character / skills
-    "CharacterFrame",
-    "SpellBookFrame",
-    "TalentFrame",
-    "InspectFrame",
-    -- Social
-    "FriendsFrame",
-    "GuildFrame",
-    -- Quests
-    "QuestLogFrame",
-    -- Professions / training
-    "TradeSkillFrame",
-    "CraftFrame",           -- Enchanting and a few others use CraftFrame in 1.x
-    "ClassTrainerFrame",
-    -- NPC interaction windows worth tiling
-    "MerchantFrame",
-    "AuctionFrame",
-    "TradeFrame",
-    "MailFrame",
-    "BankFrame",
-    "TaxiFrame",
-    "PetStableFrame",
-    "TabardFrame",
-    -- Misc player UI
-    "MacroFrame",
-    "KeyBindingFrame",
-    "VideoOptionsFrame",
-    "AudioOptionsFrame",
-    "InterfaceOptionsFrame",
-    "HelpFrame",
-    "LFGFrame",
-    -- Bags  (ContainerFrame1 = backpack, 2-5 = bag slots)
-    "ContainerFrame1",
-    "ContainerFrame2",
-    "ContainerFrame3",
-    "ContainerFrame4",
-    "ContainerFrame5",
-}
+local GAP        = 12    -- gap between windows (px)
+local TOP_MARGIN = 4     -- distance from top of screen for the first row
+local LEFT_MARGIN = 4    -- left margin for the first column and each wrapped row
+local MIN_WIDTH  = 150   -- frames narrower than this are skipped
+local MIN_HEIGHT = 100   -- frames shorter than this are skipped
 
 ------------------------------------------------------------------------
 -- Saved variables
 ------------------------------------------------------------------------
 TilerDB = TilerDB or {}
-if TilerDB.enabled == nil then TilerDB.enabled = true end
+TilerDB.ignored = TilerDB.ignored or {}
 
 ------------------------------------------------------------------------
--- C_Timer polyfill
--- Not all Classic Era builds expose C_Timer natively.
+-- Built-in exclusion list
+-- Anything here is never tiled regardless of size/visibility.
+-- Pattern strings use Lua's string.find (plain = false).
 ------------------------------------------------------------------------
-local function After(seconds, func)
-    if C_Timer and C_Timer.After then
-        C_Timer.After(seconds, func)
-        return
+local EXCLUDED_NAMES = {
+    -- Core WoW UI anchors
+    UIParent              = true,
+    WorldFrame            = true,
+    -- Map
+    WorldMapFrame         = true,
+    -- Tooltips
+    GameTooltip           = true,
+    ItemRefTooltip        = true,
+    ShoppingTooltip1      = true,
+    ShoppingTooltip2      = true,
+    -- Unit frames
+    PlayerFrame           = true,
+    TargetFrame           = true,
+    TargetFrameToT        = true,
+    FocusFrame            = true,
+    -- Map / navigation
+    Minimap               = true,
+    MinimapCluster        = true,
+    -- Casting bars
+    CastingBarFrame       = true,
+    FocusCastingBarFrame  = true,
+    -- HUD chrome
+    ComboPointPlayerFrame = true,
+    RuneFrame             = true,
+    DurabilityFrame       = true,
+    FramerateLabel        = true,
+    UIErrorsFrame         = true,
+    -- Status / alerts
+    TicketStatusFrame     = true,
+    ReadyCheckFrame       = true,
+    QuestTimerFrame       = true,
+    RaidBossEmoteFrame    = true,
+    SubZoneTextFrame      = true,
+    ZoneTextFrame         = true,
+    AutoFollowStatus      = true,
+    LevelUpDisplay        = true,
+    PVPReadyDialog        = true,
+}
+
+-- Pattern list: any frame whose name matches one of these is excluded.
+local EXCLUDED_PATTERNS = {
+    -- Action bars (standard + extra)
+    "^MainMenuBar",
+    "^MultiBar",
+    "^BonusActionBar",
+    "^PossessBar",
+    "^PetActionBar",
+    "^ShapeshiftBar",
+    "^MicroButton",
+    "^ActionButton",
+    "^BonusActionButton",
+    -- Chat / combat log
+    "^ChatFrame",
+    "^CombatLog",
+    -- Party / raid frames
+    "^PartyMember",
+    "^CompactRaid",
+    "^Boss%d",
+    -- Buffs / debuffs
+    "BuffFrame$",
+    "DebuffFrame$",
+    "TempEnchant",
+    -- Tooltips (catch-all)
+    "Tooltip",
+    -- ElvUI bars, chat, and unit frames
+    "^ElvUI_Bar",
+    "^ElvUI_Chat",
+    "^ElvUF_",
+    -- Static popups and alerts
+    "^StaticPopup",
+    "^AlertFrame",
+    "^WorldState",
+}
+
+local function IsExcluded(name)
+    if not name                 then return true end   -- skip anonymous frames
+    if EXCLUDED_NAMES[name]     then return true end
+    if TilerDB.ignored[name]    then return true end
+    for _, pat in ipairs(EXCLUDED_PATTERNS) do
+        if name:find(pat) then return true end
     end
-    local t = CreateFrame("Frame")
-    local elapsed = 0
-    t:SetScript("OnUpdate", function(self, dt)
-        elapsed = elapsed + dt
-        if elapsed >= seconds then
-            self:SetScript("OnUpdate", nil)
-            func()
-        end
-    end)
+    return false
 end
 
 ------------------------------------------------------------------------
--- Internal helpers
+-- Frame discovery
+-- UIParent:GetChildren() returns every direct child of UIParent, which
+-- covers virtually all addon windows and standard UI panels.
+-- Some children are non-Frame widgets (ElvUI objects, etc.) that reject
+-- Frame method calls — pcall skips them safely.
 ------------------------------------------------------------------------
-local managedSet = {}
-for _, n in ipairs(MANAGED_NAMES) do managedSet[n] = true end
-
--- Returns all currently visible managed frames except `skip`.
-local function GetVisibleOthers(skip)
-    local t = {}
-    for _, name in ipairs(MANAGED_NAMES) do
-        local f = _G[name]
-        -- IsVisible() requires self AND all ancestors to be shown.
-        -- GetLeft() is nil when a frame has no valid screen position yet.
-        if f and f ~= skip and f:IsVisible() and f:GetLeft() then
-            t[#t + 1] = f
-        end
+local function TryAddFrame(frames, f)
+    if f:IsVisible()
+    and not IsExcluded(f:GetName())
+    and (f:GetWidth()  or 0) >= MIN_WIDTH
+    and (f:GetHeight() or 0) >= MIN_HEIGHT
+    and f:GetLeft()                          -- must have valid screen coords
+    then
+        frames[#frames + 1] = f
     end
-    return t
+end
+
+local function DiscoverFrames()
+    local frames = {}
+    for _, f in ipairs({ UIParent:GetChildren() }) do
+        pcall(TryAddFrame, frames, f)
+    end
+    -- Preserve the current left-to-right visual order.
+    table.sort(frames, function(a, b)
+        return (a:GetLeft() or 0) < (b:GetLeft() or 0)
+    end)
+    return frames
 end
 
 ------------------------------------------------------------------------
 -- Placement
---
--- Coordinate convention used throughout:
---   SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
---     x = pixels from the left edge of the screen  (positive → right)
---     y = pixels from the bottom edge of the screen (positive → up)
---   GetLeft() / GetRight() / GetTop() / GetBottom() all use this origin,
---   so they can be fed directly into SetPoint offsets.
+-- Coordinate convention for SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y):
+--   x = pixels from left edge of screen
+--   y = pixels from bottom edge of screen (this is where the frame top lands)
+-- GetLeft() / GetTop() use the same origin, so they feed directly into SetPoint.
 ------------------------------------------------------------------------
-local function PlaceFrame(frame)
-    if not TilerDB.enabled   then return end
-    if InCombatLockdown()    then return end
-
-    local fw = frame:GetWidth()
-    if not fw or fw <= 0 then return end   -- frame not yet laid out
-
-    local sw = UIParent:GetWidth()
-    local sh = UIParent:GetHeight()
-
-    local others = GetVisibleOthers(frame)
-
-    local newX, newY
-
-    if #others == 0 then
-        -- Nothing else open: place at the top-left corner.
-        newX = LEFT_MARGIN
-        newY = sh - TOP_MARGIN
-    else
-        -- Find the frame with the rightmost right edge; use its top as anchor.
-        local maxRight  = 0
-        local anchorTop = sh - TOP_MARGIN
-        for _, f in ipairs(others) do
-            local r = f:GetRight() or 0
-            if r > maxRight then
-                maxRight  = r
-                anchorTop = f:GetTop() or anchorTop
-            end
-        end
-
-        if maxRight + GAP + fw <= sw then
-            -- Fits to the right of the existing strip.
-            newX = maxRight + GAP
-            newY = anchorTop
-        else
-            -- Overflows right edge → wrap below the lowest visible frame.
-            local minBottom = sh
-            for _, f in ipairs(others) do
-                local b = f:GetBottom()
-                if b and b < minBottom then minBottom = b end
-            end
-            newX = LEFT_MARGIN
-            newY = minBottom - GAP
-        end
+local function ArrangeWindows()
+    if InCombatLockdown() then
+        print("|cff00ff00Tiler:|r Cannot arrange during combat.")
+        return
     end
 
-    frame:ClearAllPoints()
-    frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", newX, newY)
-end
+    local frames = DiscoverFrames()
+    if #frames == 0 then
+        print("|cff00ff00Tiler:|r No tileable windows found.")
+        return
+    end
 
--- Defers one tick so the frame has time to compute its final dimensions.
-local function Schedule(frame)
-    After(0, function()
-        if frame:IsVisible() then PlaceFrame(frame) end
-    end)
+    local sw        = UIParent:GetWidth()
+    local sh        = UIParent:GetHeight()
+    local curX      = LEFT_MARGIN
+    local curY      = sh - TOP_MARGIN
+    local rowBottom = curY
+
+    for _, frame in ipairs(frames) do
+        local fw = frame:GetWidth()
+        local fh = frame:GetHeight()
+
+        if curX > LEFT_MARGIN and curX + fw > sw then
+            -- Overflow: wrap below the tallest frame in the current row.
+            curY      = rowBottom - GAP
+            curX      = LEFT_MARGIN
+            rowBottom = curY
+        end
+
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", curX, curY)
+
+        local bottom = curY - fh
+        if bottom < rowBottom then rowBottom = bottom end
+        curX = curX + fw + GAP
+    end
+
+    print("|cff00ff00Tiler:|r Arranged " .. #frames
+          .. " window" .. (#frames == 1 and "" or "s") .. ".")
 end
 
 ------------------------------------------------------------------------
--- Hooks
+-- Debug: list what would be tiled
 ------------------------------------------------------------------------
-
--- ShowUIPanel is the standard gateway for most UI panels:
---   CharacterFrame, SpellBookFrame, TalentFrame, QuestLogFrame,
---   FriendsFrame, GuildFrame, BankFrame, MerchantFrame, TradeSkillFrame,
---   AuctionFrame, MailFrame, TradeFrame, MacroFrame, KeyBindingFrame,
---   VideoOptionsFrame, AudioOptionsFrame, InterfaceOptionsFrame,
---   HelpFrame, LFGFrame, TabardFrame, PetStableFrame, TaxiFrame …
-hooksecurefunc("ShowUIPanel", function(frame)
-    if not frame then return end
-    local name = frame:GetName()
-    if name and managedSet[name] then
-        Schedule(frame)
+local function DebugFrames()
+    local frames = DiscoverFrames()
+    if #frames == 0 then
+        print("|cff00ff00Tiler:|r No tileable windows found.")
+        return
     end
-end)
-
--- Container frames (bags) are shown via frame:Show() directly, bypassing
--- ShowUIPanel.  Hook each one individually once FrameXML has created them.
-local function HookContainerFrames()
-    for _, name in ipairs(MANAGED_NAMES) do
-        if name:find("^ContainerFrame%d") then
-            local f = _G[name]
-            if f then
-                f:HookScript("OnShow", function(self)
-                    Schedule(self)
-                end)
-            end
-        end
+    print("|cff00ff00Tiler:|r " .. #frames
+          .. " tileable window" .. (#frames == 1 and "" or "s") .. ":")
+    for i, f in ipairs(frames) do
+        print(string.format("  %d. %-40s %dx%d  at (%d,%d)",
+            i,
+            f:GetName() or "(unnamed)",
+            math.floor(f:GetWidth()  or 0),
+            math.floor(f:GetHeight() or 0),
+            math.floor(f:GetLeft()   or 0),
+            math.floor(f:GetTop()    or 0)))
     end
 end
 
--- ClassTrainerFrame and InspectFrame may also bypass ShowUIPanel in some
--- builds; hook them directly as a safety net.
-local function HookDirectShowFrames()
-    local directFrames = { "ClassTrainerFrame", "InspectFrame", "CraftFrame" }
-    for _, name in ipairs(directFrames) do
-        local f = _G[name]
-        if f and managedSet[name] then
-            f:HookScript("OnShow", function(self)
-                -- Only fire if ShowUIPanel hasn't already handled it
-                -- (double-scheduling is harmless but wasteful).
-                Schedule(self)
-            end)
-        end
-    end
-end
-
-local loader = CreateFrame("Frame")
-loader:RegisterEvent("ADDON_LOADED")
-loader:SetScript("OnEvent", function(self, event, arg1)
-    if arg1 == ADDON_NAME then
-        HookContainerFrames()
-        HookDirectShowFrames()
-        self:UnregisterEvent("ADDON_LOADED")
-    end
-end)
-
 ------------------------------------------------------------------------
--- Slash command  (/tiler)
+-- Slash command
 ------------------------------------------------------------------------
 SLASH_TILER1 = "/tiler"
 SlashCmdList["TILER"] = function(msg)
-    -- portable trim + lower (strtrim is not available on every build)
-    msg = (msg:match("^%s*(.-)%s*$") or ""):lower()
+    msg = msg:match("^%s*(.-)%s*$") or ""
+    local cmd, arg = msg:match("^(%S+)%s*(.*)$")
+    cmd = (cmd or ""):lower()
+    arg = (arg or ""):match("^%s*(.-)%s*$")   -- trim arg too
 
-    if msg == "on" then
-        TilerDB.enabled = true
-        print("|cff00ff00Tiler:|r Enabled.")
-    elseif msg == "off" then
-        TilerDB.enabled = false
-        print("|cff00ff00Tiler:|r Disabled.")
+    if cmd == "" then
+        ArrangeWindows()
+
+    elseif cmd == "debug" then
+        DebugFrames()
+
+    elseif cmd == "ignore" then
+        if arg == "" then
+            print("|cff00ff00Tiler:|r Usage: /tiler ignore <FrameName>")
+        else
+            TilerDB.ignored[arg] = true
+            print("|cff00ff00Tiler:|r Ignoring: " .. arg)
+        end
+
+    elseif cmd == "unignore" then
+        if arg == "" then
+            print("|cff00ff00Tiler:|r Usage: /tiler unignore <FrameName>")
+        else
+            TilerDB.ignored[arg] = nil
+            print("|cff00ff00Tiler:|r No longer ignoring: " .. arg)
+        end
+
+    elseif cmd == "ignored" then
+        local list = {}
+        for name in pairs(TilerDB.ignored) do list[#list + 1] = name end
+        table.sort(list)
+        if #list == 0 then
+            print("|cff00ff00Tiler:|r Ignore list is empty.")
+        else
+            print("|cff00ff00Tiler:|r Ignored frames:")
+            for _, name in ipairs(list) do
+                print("  - " .. name)
+            end
+        end
+
     else
-        local status = TilerDB.enabled
-            and "|cff00ff00enabled|r"
-            or  "|cffff4444disabled|r"
-        print("|cff00ff00Tiler:|r " .. status .. "  —  /tiler on | off")
+        print("|cff00ff00Tiler:|r /tiler · /tiler debug · /tiler ignore <name> · /tiler unignore <name> · /tiler ignored")
     end
 end
