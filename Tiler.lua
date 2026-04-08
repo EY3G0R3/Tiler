@@ -12,8 +12,8 @@
 --   /tiler list               show hardcoded + user-added allowlist
 
 local GAP         = 12    -- gap between windows (px)
-local TOP_MARGIN  = 4     -- distance from top of screen for the first row
-local LEFT_MARGIN = 4     -- left margin for the first column and each wrapped row
+local TOP_MARGIN  = 50    -- distance from top of screen for the first row
+local LEFT_MARGIN = 50    -- left margin for the first column and each wrapped row
 local MIN_WIDTH   = 150   -- frames narrower than this are skipped
 local MIN_HEIGHT  = 100   -- frames shorter than this are skipped
 
