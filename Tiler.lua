@@ -26,15 +26,6 @@ local MIN_HEIGHT  = 100   -- frames shorter than this are skipped
 TilerDB = TilerDB or {}
 
 local initFrame = CreateFrame("Frame")
-initFrame:RegisterEvent("PLAYER_LOGIN")
-initFrame:SetScript("OnEvent", function(self)
-    TilerDB = TilerDB or {}
-    TilerDB.allowed = TilerDB.allowed or {}
-    if not GetBindingKey("CLICK TilerArrangeButton:LeftButton") then
-        SetBindingClick("CTRL-T", "TilerArrangeButton", "LeftButton")
-    end
-    self:UnregisterEvent("PLAYER_LOGIN")
-end)
 
 ------------------------------------------------------------------------
 -- Hardcoded allowlist
@@ -139,15 +130,15 @@ end)
 ------------------------------------------------------------------------
 -- Placement
 ------------------------------------------------------------------------
-local function ArrangeWindows()
+local function ArrangeWindows(silent)
     if InCombatLockdown() then
-        print("|cff00ff00Tiler:|r Cannot arrange during combat.")
+        if not silent then print("|cff00ff00Tiler:|r Cannot arrange during combat.") end
         return
     end
 
     local frames = DiscoverFrames()
     if #frames == 0 then
-        print("|cff00ff00Tiler:|r No tileable windows found.")
+        if not silent then print("|cff00ff00Tiler:|r No tileable windows found.") end
         return
     end
 
@@ -190,8 +181,10 @@ local function ArrangeWindows()
     _elapsed = 0
     _enforcer:Show()
 
-    print("|cff00ff00Tiler:|r Arranged " .. #placements
-          .. " window" .. (#placements == 1 and "" or "s") .. ".")
+    if not silent then
+        print("|cff00ff00Tiler:|r Arranged " .. #placements
+              .. " window" .. (#placements == 1 and "" or "s") .. ".")
+    end
 end
 
 ------------------------------------------------------------------------
@@ -244,6 +237,66 @@ local function PrintAllowList()
 end
 
 ------------------------------------------------------------------------
+-- Auto-tile
+-- Hooks OnShow/OnHide on every allowlisted frame so tiling re-runs
+-- silently whenever a window opens or closes.  A one-frame scheduler
+-- coalesces rapid show/hide pairs into a single ArrangeWindows call.
+------------------------------------------------------------------------
+local _autoTilePending = false
+local _autoScheduler = CreateFrame("Frame")
+_autoScheduler:Hide()
+_autoScheduler:SetScript("OnUpdate", function(self)
+    self:Hide()
+    _autoTilePending = false
+    ArrangeWindows(true)
+end)
+
+local function ScheduleAutoTile()
+    if InCombatLockdown() or _autoTilePending then return end
+    _autoTilePending = true
+    _autoScheduler:Show()
+end
+
+local _hookedFrames = {}
+local function HookFrame(frame)
+    if not frame or _hookedFrames[frame] then return end
+    _hookedFrames[frame] = true
+    frame:HookScript("OnShow", ScheduleAutoTile)
+    frame:HookScript("OnHide", ScheduleAutoTile)
+end
+
+local function HookAllowedFrames()
+    for name in pairs(ALLOWED_NAMES) do
+        HookFrame(_G[name])
+    end
+    if TilerDB and TilerDB.allowed then
+        for name in pairs(TilerDB.allowed) do
+            HookFrame(_G[name])
+        end
+    end
+end
+
+-- Wire up initFrame now that HookAllowedFrames is defined.
+-- ADDON_LOADED fires once per addon (before PLAYER_LOGIN) so we can pick
+-- up frames the moment each addon creates them.
+initFrame:RegisterEvent("ADDON_LOADED")
+initFrame:RegisterEvent("PLAYER_LOGIN")
+initFrame:SetScript("OnEvent", function(self, event)
+    if event == "ADDON_LOADED" then
+        HookAllowedFrames()
+    elseif event == "PLAYER_LOGIN" then
+        TilerDB = TilerDB or {}
+        TilerDB.allowed = TilerDB.allowed or {}
+        if not GetBindingKey("CLICK TilerArrangeButton:LeftButton") then
+            SetBindingClick("CTRL-T", "TilerArrangeButton", "LeftButton")
+        end
+        HookAllowedFrames()
+        self:UnregisterEvent("ADDON_LOADED")
+        self:UnregisterEvent("PLAYER_LOGIN")
+    end
+end)
+
+------------------------------------------------------------------------
 -- Key binding
 -- SetBindingClick is the reliable dispatch path in WoW Classic.
 -- A named hidden button receives synthetic clicks; the BINDING_* globals
@@ -277,6 +330,7 @@ SlashCmdList["TILER"] = function(msg)
             print("|cff00ff00Tiler:|r Usage: /tiler allow <FrameName>")
         else
             TilerDB.allowed[arg] = true
+            HookFrame(_G[arg])
             print("|cff00ff00Tiler:|r Allowed: " .. arg)
         end
 
