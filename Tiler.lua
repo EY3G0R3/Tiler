@@ -30,6 +30,9 @@ initFrame:RegisterEvent("PLAYER_LOGIN")
 initFrame:SetScript("OnEvent", function(self)
     TilerDB = TilerDB or {}
     TilerDB.allowed = TilerDB.allowed or {}
+    if not GetBindingKey("CLICK TilerArrangeButton:LeftButton") then
+        SetBindingClick("CTRL-T", "TilerArrangeButton", "LeftButton")
+    end
     self:UnregisterEvent("PLAYER_LOGIN")
 end)
 
@@ -239,6 +242,19 @@ local function PrintAllowList()
         end
     end
 end
+
+------------------------------------------------------------------------
+-- Key binding
+-- SetBindingClick is the reliable dispatch path in WoW Classic.
+-- A named hidden button receives synthetic clicks; the BINDING_* globals
+-- control how the entry appears in the Key Bindings UI.
+------------------------------------------------------------------------
+BINDING_HEADER_TILER = "Tiler"
+_G["BINDING_NAME_CLICK TilerArrangeButton:LeftButton"] = "Arrange Windows"
+
+local _arrangeBtn = CreateFrame("Button", "TilerArrangeButton", UIParent)
+_arrangeBtn:RegisterForClicks("AnyUp")
+_arrangeBtn:SetScript("OnClick", function() ArrangeWindows() end)
 
 ------------------------------------------------------------------------
 -- Slash command

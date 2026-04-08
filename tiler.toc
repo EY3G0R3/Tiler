@@ -6,4 +6,5 @@
 ## DefaultState: enabled
 ## SavedVariables: TilerDB
 
+Bindings.xml
 Tiler.lua

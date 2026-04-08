@@ -1,0 +1,3 @@
+<Bindings>
+    <Binding name="CLICK TilerArrangeButton:LeftButton" description="Arrange Windows" header="Tiler" />
+</Bindings>
