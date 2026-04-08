@@ -38,6 +38,7 @@ local ALLOWED_NAMES = {
     FriendsFrame          = true,
     SpellBookFrame        = true,
     TalentFrame           = true,
+    PlayerTalentFrame     = true,
     QuestLogFrame         = true,
     GuildFrame            = true,
     MacroFrame            = true,
