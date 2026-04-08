@@ -1,0 +1,9 @@
+## Interface: 11508
+## Title: Tiler
+## Notes: Tiling window manager — new windows open beside existing ones instead of overlapping.
+## Author:
+## Version: 0.1.0
+## DefaultState: enabled
+## SavedVariables: TilerDB
+
+Tiler.lua
