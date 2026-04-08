@@ -128,6 +128,13 @@ local function ArrangeWindows()
             rowBottom = curY
         end
 
+        -- Release from WoW's UI panel system so our SetPoint is not
+        -- immediately overridden by UpdateUIPanel().
+        local name = frame:GetName()
+        if UIPanelWindows and name and UIPanelWindows[name] then
+            UIPanelWindows[name] = nil
+        end
+
         frame:ClearAllPoints()
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", curX, curY)
 
