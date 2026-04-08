@@ -98,6 +98,42 @@ local function DiscoverFrames()
 end
 
 ------------------------------------------------------------------------
+-- Position enforcer
+-- After /tiler runs, addon hooks (ElvUI, MoveAny) may fire synchronously
+-- or asynchronously and snap frames back. The enforcer re-corrects drift
+-- every game frame for ENFORCE_SECS seconds, which outlasts any timer-
+-- based restore. If frames still flicker, the competing addon hooks
+-- SetPoint directly — a different strategy would be needed.
+------------------------------------------------------------------------
+local ENFORCE_SECS = 2
+
+local _enforcer = CreateFrame("Frame")
+_enforcer:Hide()
+local _targets  = {}
+local _elapsed  = 0
+
+_enforcer:SetScript("OnUpdate", function(self, dt)
+    _elapsed = _elapsed + dt
+    if _elapsed >= ENFORCE_SECS then
+        _targets = {}
+        _elapsed = 0
+        self:Hide()
+        return
+    end
+    for _, t in ipairs(_targets) do
+        local f = t.frame
+        if f:IsShown() then
+            local left = f:GetLeft() or 0
+            local top  = f:GetTop()  or 0
+            if math.abs(left - t.x) > 1 or math.abs(top - t.y) > 1 then
+                f:ClearAllPoints()
+                f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", t.x, t.y)
+            end
+        end
+    end
+end)
+
+------------------------------------------------------------------------
 -- Placement
 ------------------------------------------------------------------------
 local function ArrangeWindows()
@@ -118,6 +154,7 @@ local function ArrangeWindows()
     local curY      = sh - TOP_MARGIN
     local rowBottom = curY
 
+    local placements = {}
     for _, frame in ipairs(frames) do
         local fw = frame:GetWidth()
         local fh = frame:GetHeight()
@@ -128,23 +165,30 @@ local function ArrangeWindows()
             rowBottom = curY
         end
 
-        -- Release from WoW's UI panel system so our SetPoint is not
-        -- immediately overridden by UpdateUIPanel().
-        local name = frame:GetName()
-        if UIPanelWindows and name and UIPanelWindows[name] then
-            UIPanelWindows[name] = nil
-        end
-
-        frame:ClearAllPoints()
-        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", curX, curY)
+        placements[#placements + 1] = { frame = frame, x = curX, y = curY }
 
         local bottom = curY - fh
         if bottom < rowBottom then rowBottom = bottom end
         curX = curX + fw + GAP
     end
 
-    print("|cff00ff00Tiler:|r Arranged " .. #frames
-          .. " window" .. (#frames == 1 and "" or "s") .. ".")
+    -- Apply positions immediately, then keep enforcing for ENFORCE_SECS.
+    for _, p in ipairs(placements) do
+        local frame = p.frame
+        local name  = frame:GetName()
+        if UIPanelWindows and name and UIPanelWindows[name] then
+            UIPanelWindows[name] = nil
+        end
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", p.x, p.y)
+    end
+
+    _targets = placements
+    _elapsed = 0
+    _enforcer:Show()
+
+    print("|cff00ff00Tiler:|r Arranged " .. #placements
+          .. " window" .. (#placements == 1 and "" or "s") .. ".")
 end
 
 ------------------------------------------------------------------------
