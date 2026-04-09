@@ -293,6 +293,11 @@ local function RefreshRows()
                 if d.source == "default" or d.allowed then nAllowed = nAllowed + 1 end
             end
         end
+        local maxOff = math.max(0, #_data - NUM_VIS)
+        if _win.scrollbar then
+            _win.scrollbar:SetMinMaxValues(0, maxOff)
+            _win.scrollbar:SetShown(maxOff > 0)
+        end
         local scroll = total > NUM_VIS
             and ("  ["..(  _scrollOffset + 1).."-"
                  ..math.min(_scrollOffset + NUM_VIS, total).." / "..total.."]")
@@ -307,6 +312,9 @@ end
 local function ScrollTo(offset)
     local maxOff  = math.max(0, #_data - NUM_VIS)
     _scrollOffset = math.max(0, math.min(offset, maxOff))
+    if _win and _win.scrollbar then
+        _win.scrollbar:SetValue(_scrollOffset)
+    end
     RefreshRows()
 end
 
@@ -403,10 +411,31 @@ local function Build()
     end)
     prioTipBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Scrollbar (visible only when list overflows NUM_VIS rows)
+    local SB_W = 14
+    local sb = CreateFrame("Slider", nil, win)
+    sb:SetOrientation("VERTICAL")
+    sb:SetPoint("TOPRIGHT",    win, "TOPRIGHT",    -PAD, -LIST_TOP)
+    sb:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -PAD,  FOOT_H)
+    sb:SetWidth(SB_W)
+    sb:SetMinMaxValues(0, 0)
+    sb:SetValue(0)
+    sb:SetValueStep(1)
+    local sbBg = sb:CreateTexture(nil, "BACKGROUND")
+    sbBg:SetAllPoints()
+    sbBg:SetColorTexture(0.08, 0.08, 0.10, 0.8)
+    sb:SetThumbTexture("Interface\\Buttons\\UI-ScrollBar-Knob")
+    sb:GetThumbTexture():SetSize(SB_W, 20)
+    sb:SetScript("OnValueChanged", function(self, value, userInput)
+        if userInput then ScrollTo(math.floor(value + 0.5)) end
+    end)
+    sb:Hide()
+    win.scrollbar = sb
+
     -- List area: plain Frame with NUM_VIS rows at fixed positions
     local lf = CreateFrame("Frame", nil, win)
     lf:SetPoint("TOPLEFT",     win, "TOPLEFT",     PAD,  -LIST_TOP)
-    lf:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -PAD, FOOT_H)
+    lf:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -PAD,  FOOT_H)
 
     for i = 1, NUM_VIS do
         local row = NewRow(lf)
