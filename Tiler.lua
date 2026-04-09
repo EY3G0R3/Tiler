@@ -199,13 +199,34 @@ local function ArrangeWindows(silent)
     local sh = UIParent:GetHeight()
 
     local placements = {}
-    local pattern = LAYOUT_PATTERNS[#frames]
 
-    if pattern then
+    if #frames == 1 then
+        -- Single window: center of right half of screen.
+        local frame = frames[1]
+        local fw, fh = frame:GetWidth() or 0, frame:GetHeight() or 0
+        local x = math.floor(sw * 3 / 4 - fw / 2)
+        local y = math.floor(sh / 2 + fh / 2)
+        placements[1] = { frame = frame, x = x, y = y }
+
+    elseif #frames == 2 then
+        -- Two windows: left half center, right half center.
+        local positions = {
+            { qx = sw / 4 },   -- left quarter-center
+            { qx = sw * 3 / 4 }, -- right quarter-center
+        }
+        for i, frame in ipairs(frames) do
+            local fw, fh = frame:GetWidth() or 0, frame:GetHeight() or 0
+            local x = math.floor(positions[i].qx - fw / 2)
+            local y = math.floor(sh / 2 + fh / 2)
+            placements[i] = { frame = frame, x = x, y = y }
+        end
+
+    elseif LAYOUT_PATTERNS[#frames] then
         -- Smart layout: distribute frames across rows per the pattern and
         -- center each row horizontally.
-        local fi   = 1
-        local curY = sh - TOP_MARGIN
+        local pattern   = LAYOUT_PATTERNS[#frames]
+        local fi        = 1
+        local curY      = sh - TOP_MARGIN
 
         for _, rowCount in ipairs(pattern) do
             -- Sum the widths of frames in this row.
@@ -230,6 +251,7 @@ local function ArrangeWindows(silent)
             fi   = fi + rowCount
             curY = rowBottom - GAP
         end
+
     else
         -- Fallback for 13+ windows: left-to-right with wrapping.
         local curX      = LEFT_MARGIN
