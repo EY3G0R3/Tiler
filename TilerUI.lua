@@ -130,27 +130,19 @@ local function NewRow(parent)
     ab:SetSize(COL_ALLOW.w, ROW_H - 4)
     row.allowBtn = ab
 
-    local bm = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    bm:SetPoint("LEFT", row, "LEFT", COL_PRIO.x, 0)
-    bm:SetSize(22, ROW_H - 4)
-    bm:SetText("-")
-    row.btnMinus = bm
-
-    row.prioFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    row.prioFS:SetPoint("LEFT", row, "LEFT", COL_PRIO.x + 25, 0)
-    row.prioFS:SetWidth(36)
-    row.prioFS:SetJustifyH("CENTER")
-
-    local bp = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    bp:SetPoint("LEFT", row, "LEFT", COL_PRIO.x + 64, 0)
-    bp:SetSize(22, ROW_H - 4)
-    bp:SetText("+")
-    row.btnPlus = bp
+    local eb = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+    eb:SetPoint("LEFT", row, "LEFT", COL_PRIO.x + 4, 0)
+    eb:SetSize(68, ROW_H - 4)
+    eb:SetAutoFocus(false)
+    eb:SetNumeric(true)
+    eb:SetMaxLetters(3)
+    eb:SetJustifyH("CENTER")
+    row.prioEB = eb
 
     local bc = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    bc:SetPoint("LEFT", row, "LEFT", COL_PRIO.x + 90, 0)
-    bc:SetSize(30, ROW_H - 4)
-    bc:SetText("X")
+    bc:SetPoint("LEFT", eb, "RIGHT", 4, 0)
+    bc:SetSize(40, ROW_H - 4)
+    bc:SetText("reset")
     row.btnClear = bc
 
     return row
@@ -198,18 +190,28 @@ local function UpdateRow(row, d, idx)
     local function refreshPrio()
         local hp = TilerDB.priorities and TilerDB.priorities[d.name]
         local np = Tiler.GetPriority(d.name)
-        row.prioFS:SetText(hp and ("|cffffdd00"..np.."|r") or ("|cff888888"..np.."|r"))
+        row.prioEB:SetText(tostring(np))
+        if hp then
+            row.prioEB:SetTextColor(1, 0.87, 0, 1)
+        else
+            row.prioEB:SetTextColor(0.5, 0.5, 0.5, 1)
+        end
     end
     refreshPrio()
 
-    row.btnMinus:SetScript("OnClick", function()
-        Tiler.SetPriority(d.name, Tiler.GetPriority(d.name) - (IsShiftKeyDown() and 1 or 5))
+    row.prioEB:SetScript("OnEnterPressed", function(self)
+        local val = tonumber(self:GetText())
+        if val then
+            Tiler.SetPriority(d.name, val)
+        end
+        self:ClearFocus()
         refreshPrio()
     end)
-    row.btnPlus:SetScript("OnClick", function()
-        Tiler.SetPriority(d.name, Tiler.GetPriority(d.name) + (IsShiftKeyDown() and 1 or 5))
+    row.prioEB:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
         refreshPrio()
     end)
+
     row.btnClear:SetScript("OnClick", function()
         Tiler.ClearPriority(d.name)
         refreshPrio()
