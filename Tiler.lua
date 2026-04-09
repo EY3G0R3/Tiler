@@ -68,6 +68,7 @@ local ALLOWED_NAMES = {
     MerchantFrame         = true,
     ChannelFrame          = true,
     -- Addon windows
+    TilerUIWindow                              = true,
     GrouperMainFrame                           = true,
     SkilletFrame                               = true,
     Questie_BasseFrame                         = true,
