@@ -35,6 +35,10 @@ local initFrame = CreateFrame("Frame")
 -- Populated by HookAllowedFrames and addon-specific hooks.
 local _allowedObjects = {}
 
+-- Forward declaration: defined in the Auto-tile section below, but called
+-- from ArrangeWindows so it needs to be declared in scope first.
+local HookAllowedFrames
+
 ------------------------------------------------------------------------
 -- Hardcoded allowlist
 -- Only frames listed here (or added via /tiler allow) are ever tiled.
@@ -149,6 +153,11 @@ end)
 -- Placement
 ------------------------------------------------------------------------
 local function ArrangeWindows(silent)
+    -- Re-resolve allowlisted names so lazily-created frames (e.g. Grouper's
+    -- AceGUI window, which sets _G["GrouperMainFrame"] only on first open)
+    -- are registered in _allowedObjects before DiscoverFrames runs.
+    HookAllowedFrames()
+
     if InCombatLockdown() then
         if not silent then print("|cff00ff00Tiler:|r Cannot arrange during combat.") end
         return
@@ -342,7 +351,7 @@ local function HookFrame(frame)
     if frame:IsShown() then ScheduleAutoTile() end
 end
 
-local function HookAllowedFrames()
+HookAllowedFrames = function()
     for name in pairs(ALLOWED_NAMES) do
         local f = _G[name]
         if f then _allowedObjects[f] = true end
