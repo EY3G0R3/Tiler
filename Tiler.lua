@@ -5,12 +5,15 @@
 -- the strip would overflow the screen.
 --
 -- Commands:
---   /tiler                    arrange all allowed windows
---   /tiler debug              list every frame that would be tiled
---   /tiler scan               list all visible candidate frames (allowed or not)
---   /tiler allow  <name>      add a frame to the persistent allowlist
---   /tiler remove <name>      remove a frame from the persistent allowlist
---   /tiler list               show hardcoded + user-added allowlist
+--   /tiler                          arrange all allowed windows
+--   /tiler debug                    list every frame that would be tiled
+--   /tiler scan                     list all visible candidate frames (allowed or not)
+--   /tiler allow     <name>         add a frame to the persistent allowlist
+--   /tiler remove    <name>         remove a frame from the persistent allowlist
+--   /tiler list                     show hardcoded + user-added allowlist
+--   /tiler priority  <name> <n>     set sort priority (lower = further left; default 50)
+--   /tiler priority  <name>         clear explicit priority (reset to default)
+--   /tiler priorities               list all explicit priorities
 
 local GAP         = 12    -- gap between windows (px)
 local TOP_MARGIN  = 50    -- distance from top of screen for the first row
@@ -68,6 +71,10 @@ local function IsAllowed(name)
     return false
 end
 
+local function GetPriority(name)
+    return (name and TilerDB.priorities and TilerDB.priorities[name]) or 50
+end
+
 ------------------------------------------------------------------------
 -- Frame discovery
 ------------------------------------------------------------------------
@@ -87,8 +94,11 @@ local function DiscoverFrames()
     for _, f in ipairs({ UIParent:GetChildren() }) do
         pcall(TryAddFrame, frames, f)
     end
-    -- Preserve the current left-to-right visual order.
+    -- Sort by explicit priority first; ties fall back to current visual order.
     table.sort(frames, function(a, b)
+        local pa = GetPriority(a:GetName())
+        local pb = GetPriority(b:GetName())
+        if pa ~= pb then return pa < pb end
         return (a:GetLeft() or 0) < (b:GetLeft() or 0)
     end)
     return frames
@@ -274,6 +284,28 @@ local function PrintAllowList()
 end
 
 ------------------------------------------------------------------------
+-- List explicit priorities
+------------------------------------------------------------------------
+local function ListPriorities()
+    local list = {}
+    for name, p in pairs(TilerDB.priorities or {}) do
+        list[#list + 1] = { name = name, p = p }
+    end
+    if #list == 0 then
+        print("|cff00ff00Tiler:|r No explicit priorities set (all frames default to 50).")
+        return
+    end
+    table.sort(list, function(a, b)
+        if a.p ~= b.p then return a.p < b.p end
+        return a.name < b.name
+    end)
+    print("|cff00ff00Tiler:|r " .. #list .. " explicit priorit" .. (#list == 1 and "y" or "ies") .. ":")
+    for _, t in ipairs(list) do
+        print(string.format("  %3d  %s", t.p, t.name))
+    end
+end
+
+------------------------------------------------------------------------
 -- Auto-tile
 -- Hooks OnShow/OnHide on every allowlisted frame so tiling re-runs
 -- silently whenever a window opens or closes.  A one-frame scheduler
@@ -323,7 +355,8 @@ initFrame:SetScript("OnEvent", function(self, event)
         HookAllowedFrames()
     elseif event == "PLAYER_LOGIN" then
         TilerDB = TilerDB or {}
-        TilerDB.allowed = TilerDB.allowed or {}
+        TilerDB.allowed     = TilerDB.allowed     or {}
+        TilerDB.priorities  = TilerDB.priorities  or {}
         if not GetBindingKey("CLICK TilerArrangeButton:LeftButton") then
             SetBindingClick("CTRL-T", "TilerArrangeButton", "LeftButton")
         end
@@ -385,7 +418,29 @@ SlashCmdList["TILER"] = function(msg)
     elseif cmd == "list" then
         PrintAllowList()
 
+    elseif cmd == "priority" then
+        local name, numStr = arg:match("^(%S+)%s*(.*)$")
+        name   = name   or ""
+        numStr = (numStr or ""):match("^%s*(.-)%s*$")
+        if name == "" then
+            ListPriorities()
+        elseif numStr == "" then
+            TilerDB.priorities[name] = nil
+            print("|cff00ff00Tiler:|r " .. name .. " priority cleared (back to default 50).")
+        else
+            local n = tonumber(numStr)
+            if not n then
+                print("|cff00ff00Tiler:|r Priority must be a number.")
+            else
+                TilerDB.priorities[name] = n
+                print("|cff00ff00Tiler:|r " .. name .. " priority set to " .. n .. ".")
+            end
+        end
+
+    elseif cmd == "priorities" then
+        ListPriorities()
+
     else
-        print("|cff00ff00Tiler:|r /tiler · /tiler debug · /tiler scan · /tiler allow <name> · /tiler remove <name> · /tiler list")
+        print("|cff00ff00Tiler:|r /tiler · /tiler debug · /tiler scan · /tiler allow <name> · /tiler remove <name> · /tiler list · /tiler priority <name> [n] · /tiler priorities")
     end
 end
