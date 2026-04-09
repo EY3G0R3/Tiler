@@ -29,7 +29,7 @@ local COL_ALLOW = { x = 296, w = 72  }
 local COL_PRIO  = { x = 372, w = 138 }
 local INNER_W   = COL_PRIO.x + COL_PRIO.w     -- 510
 
-local SRC_COL   = { core = "|cff888888", user = "|cff44aaff", scan = "|cff666666" }
+local SRC_COL   = { default = "|cff888888", user = "|cff44aaff", scan = "|cff666666" }
 local CHECK_TEX = "|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t"
 local CROSS_TEX = "|TInterface\\RaidFrame\\ReadyCheck-NotReady:14:14|t"
 
@@ -53,7 +53,7 @@ local function GetRows()
     for name in pairs(Tiler.ALLOWED_NAMES) do
         if not seen[name] then
             seen[name] = true
-            list[#list+1] = { name=name, source="core", frame=_G[name], allowed=true }
+            list[#list+1] = { name=name, source="default", frame=_G[name], allowed=true }
         end
     end
 
@@ -174,8 +174,8 @@ local function UpdateRow(row, d, idx)
     row.nameFS:SetText(vis and ("|cffffdd00"..d.name.."|r") or ("|cffaaaaaa"..d.name.."|r"))
     row.srcFS:SetText((SRC_COL[d.source] or "")..d.source.."|r")
 
-    if d.source == "core" then
-        row.allowBtn:SetText("Core")
+    if d.source == "default" then
+        row.allowBtn:SetText("default")
         row.allowBtn:Disable()
     elseif d.allowed then
         row.allowBtn:SetText(CHECK_TEX)
@@ -235,7 +235,7 @@ local function RefreshRows()
         local total    = #_data
         local nAllowed = 0
         for _, d in ipairs(_data) do
-            if d.source == "core" or d.allowed then nAllowed = nAllowed + 1 end
+            if d.source == "default" or d.allowed then nAllowed = nAllowed + 1 end
         end
         local scroll = total > NUM_VIS
             and ("  ["..(  _scrollOffset + 1).."-"
