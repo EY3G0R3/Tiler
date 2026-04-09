@@ -29,7 +29,9 @@ local COL_ALLOW = { x = 296, w = 72  }
 local COL_PRIO  = { x = 372, w = 138 }
 local INNER_W   = COL_PRIO.x + COL_PRIO.w     -- 510
 
-local SRC_COL = { core = "|cff888888", user = "|cff44aaff", scan = "|cff666666" }
+local SRC_COL   = { core = "|cff888888", user = "|cff44aaff", scan = "|cff666666" }
+local CHECK_TEX = "|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t"
+local CROSS_TEX = "|TInterface\\RaidFrame\\ReadyCheck-NotReady:14:14|t"
 
 ------------------------------------------------------------------------
 -- Module state
@@ -176,7 +178,7 @@ local function UpdateRow(row, d, idx)
         row.allowBtn:SetText("Core")
         row.allowBtn:Disable()
     elseif d.allowed then
-        row.allowBtn:SetText("ON")
+        row.allowBtn:SetText(CHECK_TEX)
         row.allowBtn:Enable()
         row.allowBtn:SetScript("OnClick", function()
             Tiler.Disallow(d.name)
@@ -184,7 +186,7 @@ local function UpdateRow(row, d, idx)
             UpdateRow(row, d, idx)
         end)
     else
-        row.allowBtn:SetText("Allow")
+        row.allowBtn:SetText(CROSS_TEX)
         row.allowBtn:Enable()
         row.allowBtn:SetScript("OnClick", function()
             Tiler.Allow(d.name)
@@ -300,7 +302,7 @@ local function Build()
     Hdr("",         COL_VIS.x,   COL_VIS.w,   "CENTER")
     Hdr("Window",   COL_NAME.x,  COL_NAME.w,  "LEFT")
     Hdr("Source",   COL_SRC.x,   COL_SRC.w,   "CENTER")
-    Hdr("Allowed",  COL_ALLOW.x, COL_ALLOW.w, "CENTER")
+    Hdr("Tile",     COL_ALLOW.x, COL_ALLOW.w, "CENTER")
     Hdr("Priority", COL_PRIO.x,  COL_PRIO.w,  "LEFT")
 
     -- Divider under headers
