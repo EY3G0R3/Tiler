@@ -386,6 +386,9 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
                     _allowedObjects[f] = true
                     HookFrame(f)
                 end
+                -- Fire directly: the frame may already be shown by the time
+                -- this post-hook runs, so OnShow may never fire for this open.
+                ScheduleAutoTile()
             end)
         end
     elseif event == "PLAYER_LOGIN" then
