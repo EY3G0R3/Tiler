@@ -77,21 +77,46 @@ local function GetRows()
         end
     end
 
-    table.sort(list, function(a, b)
-        -- Visible windows before non-visible
-        local va = a.frame and a.frame:IsShown() and 1 or 0
-        local vb = b.frame and b.frame:IsShown() and 1 or 0
-        if va ~= vb then return va > vb end
-        -- Within each visibility group: lower priority number = higher in list
-        local pa = Tiler.GetPriority(a.name)
-        local pb = Tiler.GetPriority(b.name)
-        if pa ~= pb then return pa < pb end
-        -- Tiebreaker: alphabetical
-        return a.name < b.name
-    end)
+    -- Split into three groups:
+    --   g1: visible + tiling enabled
+    --   g2: visible + tiling disabled
+    --   g3: not visible
+    local g1, g2, g3 = {}, {}, {}
+    for _, d in ipairs(list) do
+        local vis   = d.frame and d.frame:IsShown()
+        local tiled = d.source == "default" or d.allowed
+        if vis and tiled then
+            g1[#g1+1] = d
+        elseif vis then
+            g2[#g2+1] = d
+        else
+            g3[#g3+1] = d
+        end
+    end
 
-    for i, d in ipairs(list) do d._idx = i end
-    return list
+    local function sortGroup(g)
+        table.sort(g, function(a, b)
+            local pa = Tiler.GetPriority(a.name)
+            local pb = Tiler.GetPriority(b.name)
+            if pa ~= pb then return pa < pb end
+            return a.name < b.name
+        end)
+    end
+    sortGroup(g1); sortGroup(g2); sortGroup(g3)
+
+    local result = {}
+    for _, d in ipairs(g1) do result[#result+1] = d end
+    if #g1 > 0 and (#g2 > 0 or #g3 > 0) then
+        result[#result+1] = { _gap = true }
+    end
+    for _, d in ipairs(g2) do result[#result+1] = d end
+    if #g2 > 0 and #g3 > 0 then
+        result[#result+1] = { _gap = true }
+    end
+    for _, d in ipairs(g3) do result[#result+1] = d end
+
+    for i, d in ipairs(result) do d._idx = i end
+    return result
 end
 
 ------------------------------------------------------------------------
@@ -108,6 +133,13 @@ local function NewRow(parent)
 
     row.bg = row:CreateTexture(nil, "BACKGROUND")
     row.bg:SetAllPoints(row)
+
+    row.divider = row:CreateTexture(nil, "ARTWORK")
+    row.divider:SetPoint("LEFT",  row, "LEFT",  4, 0)
+    row.divider:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+    row.divider:SetHeight(1)
+    row.divider:SetColorTexture(0.35, 0.35, 0.35, 0.7)
+    row.divider:Hide()
 
     row.dot = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     row.dot:SetPoint("LEFT", row, "LEFT", COL_VIS.x, 0)
@@ -153,6 +185,25 @@ end
 ------------------------------------------------------------------------
 local function UpdateRow(row, d, idx)
     row._data = d
+
+    -- Gap/separator row
+    if d._gap then
+        row.bg:SetColorTexture(0, 0, 0, 0)
+        row.divider:Show()
+        row.dot:SetText("")
+        row.nameFS:SetText("")
+        row.srcFS:SetText("")
+        row.allowBtn:Hide()
+        row.prioEB:Hide()
+        row.btnClear:Hide()
+        return
+    end
+
+    row.divider:Hide()
+    row.allowBtn:Show()
+    row.prioEB:Show()
+    row.btnClear:Show()
+
     local f   = d.frame
     local vis = f and f:IsShown()
 
@@ -234,10 +285,13 @@ local function RefreshRows()
     end
 
     if _win then
-        local total    = #_data
+        local total    = 0
         local nAllowed = 0
         for _, d in ipairs(_data) do
-            if d.source == "default" or d.allowed then nAllowed = nAllowed + 1 end
+            if not d._gap then
+                total = total + 1
+                if d.source == "default" or d.allowed then nAllowed = nAllowed + 1 end
+            end
         end
         local scroll = total > NUM_VIS
             and ("  ["..(  _scrollOffset + 1).."-"
