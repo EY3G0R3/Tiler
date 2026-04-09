@@ -58,6 +58,7 @@ local ALLOWED_NAMES = {
     InterfaceOptionsFrame = true,
     HelpFrame             = true,
     AuctionHouseFrame     = true,
+    AuctionFrame          = true,
     TradeSkillFrame       = true,
     CraftFrame            = true,
     TradeFrame            = true,
