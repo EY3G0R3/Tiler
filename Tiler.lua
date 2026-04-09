@@ -31,6 +31,10 @@ TilerDB = TilerDB or {}
 
 local initFrame = CreateFrame("Frame")
 
+-- Frames allowed by object reference rather than name (e.g. unnamed AceGUI frames).
+-- Populated by HookAllowedFrames and addon-specific hooks.
+local _allowedObjects = {}
+
 ------------------------------------------------------------------------
 -- Hardcoded allowlist
 -- Only frames listed here (or added via /tiler allow) are ever tiled.
@@ -81,7 +85,7 @@ end
 ------------------------------------------------------------------------
 local function TryAddFrame(frames, f)
     if f:IsVisible()
-    and IsAllowed(f:GetName())
+    and (IsAllowed(f:GetName()) or _allowedObjects[f])
     and (f:GetWidth()  or 0) >= MIN_WIDTH
     and (f:GetHeight() or 0) >= MIN_HEIGHT
     and f:GetLeft()
@@ -340,11 +344,15 @@ end
 
 local function HookAllowedFrames()
     for name in pairs(ALLOWED_NAMES) do
-        HookFrame(_G[name])
+        local f = _G[name]
+        if f then _allowedObjects[f] = true end
+        HookFrame(f)
     end
     if TilerDB and TilerDB.allowed then
         for name in pairs(TilerDB.allowed) do
-            HookFrame(_G[name])
+            local f = _G[name]
+            if f then _allowedObjects[f] = true end
+            HookFrame(f)
         end
     end
 end
@@ -362,7 +370,9 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
         if addonName == "Grouper" and Grouper and Grouper.CreateMainWindow then
             hooksecurefunc(Grouper, "CreateMainWindow", function(g)
                 if g.mainFrame and g.mainFrame.frame then
-                    HookFrame(g.mainFrame.frame)
+                    local f = g.mainFrame.frame
+                    _allowedObjects[f] = true
+                    HookFrame(f)
                 end
             end)
         end
