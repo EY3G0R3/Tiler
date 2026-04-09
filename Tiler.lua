@@ -370,6 +370,17 @@ HookAllowedFrames = function()
             HookFrame(f)
         end
     end
+    -- MailBank: aceFrame is a module-local AceGUI widget (not in _G).
+    -- InventoryUIFrame is a named child of aceFrame.frame, so we find the
+    -- tileable frame by walking up one parent level.
+    local inv = _G["InventoryUIFrame"]
+    if inv then
+        local f = inv:GetParent()
+        if f and f ~= UIParent then
+            _allowedObjects[f] = true
+            HookFrame(f)
+        end
+    end
 end
 
 -- Wire up initFrame now that HookAllowedFrames is defined.
@@ -382,20 +393,6 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
         HookAllowedFrames()
         -- Grouper uses AceGUI and re-creates GrouperMainFrame on every open/close
         -- cycle, so we hook CreateMainWindow to re-hook the new frame each time.
-        -- MailBank: aceFrame is module-local; InventoryUIFrame is a named child
-        -- whose parent is aceFrame.frame — the actual WoW frame we want to tile.
-        if addonName == "MailBank" and MailBank and MailBank.iniWindow then
-            hooksecurefunc(MailBank, "iniWindow", function()
-                local inv = _G["InventoryUIFrame"]
-                if inv then
-                    local f = inv:GetParent()
-                    if f then
-                        _allowedObjects[f] = true
-                        HookFrame(f)
-                    end
-                end
-            end)
-        end
         if addonName == "Grouper" and Grouper and Grouper.CreateMainWindow then
             hooksecurefunc(Grouper, "CreateMainWindow", function(g)
                 if g.mainFrame and g.mainFrame.frame then
