@@ -75,10 +75,16 @@ local function GetRows()
         end
     end
 
-    local ORD = { core=1, user=2, scan=3 }
     table.sort(list, function(a, b)
-        local oa, ob = ORD[a.source], ORD[b.source]
-        if oa ~= ob then return oa < ob end
+        -- Visible windows before non-visible
+        local va = a.frame and a.frame:IsShown() and 1 or 0
+        local vb = b.frame and b.frame:IsShown() and 1 or 0
+        if va ~= vb then return va > vb end
+        -- Within each visibility group: lower priority number = higher in list
+        local pa = Tiler.GetPriority(a.name)
+        local pb = Tiler.GetPriority(b.name)
+        if pa ~= pb then return pa < pb end
+        -- Tiebreaker: alphabetical
         return a.name < b.name
     end)
 
