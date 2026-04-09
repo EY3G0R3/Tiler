@@ -405,7 +405,7 @@ end
 -- Refresh — rebuild data and repaint rows
 ------------------------------------------------------------------------
 function TilerUI.Refresh()
-    if not _win then return end
+    if not _win or not _win:IsShown() then return end
     _data = GetRows()
     ScrollTo(_scrollOffset)
 end

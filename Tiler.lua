@@ -335,6 +335,7 @@ _autoScheduler:SetScript("OnUpdate", function(self)
     self:Hide()
     _autoTilePending = false
     ArrangeWindows(true)
+    if TilerUI then TilerUI.Refresh() end
 end)
 
 local function ScheduleAutoTile()
