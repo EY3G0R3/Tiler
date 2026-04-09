@@ -171,12 +171,6 @@ local function NewRow(parent)
     eb:SetJustifyH("CENTER")
     row.prioEB = eb
 
-    local bc = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    bc:SetPoint("LEFT", eb, "RIGHT", 4, 0)
-    bc:SetSize(40, ROW_H - 4)
-    bc:SetText("reset")
-    row.btnClear = bc
-
     return row
 end
 
@@ -195,14 +189,12 @@ local function UpdateRow(row, d, idx)
         row.srcFS:SetText("")
         row.allowBtn:Hide()
         row.prioEB:Hide()
-        row.btnClear:Hide()
         return
     end
 
     row.divider:Hide()
     row.allowBtn:Show()
     row.prioEB:Show()
-    row.btnClear:Show()
 
     local f   = d.frame
     local vis = f and f:IsShown()
@@ -263,10 +255,6 @@ local function UpdateRow(row, d, idx)
         refreshPrio()
     end)
 
-    row.btnClear:SetScript("OnClick", function()
-        Tiler.ClearPriority(d.name)
-        refreshPrio()
-    end)
 end
 
 ------------------------------------------------------------------------
