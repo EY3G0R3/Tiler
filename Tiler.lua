@@ -14,6 +14,7 @@
 --   /tiler priority  <name> <n>     set sort priority (lower = further left; default 50)
 --   /tiler priority  <name>         clear explicit priority (reset to default)
 --   /tiler priorities               list all explicit priorities
+--   /tiler ui                       open the window manager UI
 
 local GAP         = 12    -- gap between windows (px)
 local TOP_MARGIN  = 50    -- distance from top of screen for the first row
@@ -415,6 +416,41 @@ _arrangeBtn:SetScript("OnClick", function() ArrangeWindows() end)
 ------------------------------------------------------------------------
 -- Slash command
 ------------------------------------------------------------------------
+------------------------------------------------------------------------
+-- Public API (consumed by TilerUI.lua)
+------------------------------------------------------------------------
+Tiler = {
+    ALLOWED_NAMES = ALLOWED_NAMES,
+    MIN_WIDTH     = MIN_WIDTH,
+    MIN_HEIGHT    = MIN_HEIGHT,
+    IsAllowed     = IsAllowed,
+    GetPriority   = GetPriority,
+    Arrange       = ArrangeWindows,
+    Schedule      = ScheduleAutoTile,
+    Allow = function(name)
+        if not name or name == "" then return end
+        TilerDB.allowed[name] = true
+        local f = _G[name]
+        if f then _allowedObjects[f] = true; HookFrame(f) end
+        ScheduleAutoTile()
+    end,
+    Disallow = function(name)
+        if not name or name == "" then return end
+        TilerDB.allowed[name] = nil
+        ScheduleAutoTile()
+    end,
+    SetPriority = function(name, n)
+        if not name then return end
+        TilerDB.priorities[name] = n
+        ScheduleAutoTile()
+    end,
+    ClearPriority = function(name)
+        if not name then return end
+        if TilerDB.priorities then TilerDB.priorities[name] = nil end
+        ScheduleAutoTile()
+    end,
+}
+
 SLASH_TILER1 = "/tiler"
 SlashCmdList["TILER"] = function(msg)
     msg = msg:match("^%s*(.-)%s*$") or ""
@@ -473,7 +509,10 @@ SlashCmdList["TILER"] = function(msg)
     elseif cmd == "priorities" then
         ListPriorities()
 
+    elseif cmd == "ui" then
+        TilerUI.Toggle()
+
     else
-        print("|cff00ff00Tiler:|r /tiler · /tiler debug · /tiler scan · /tiler allow <name> · /tiler remove <name> · /tiler list · /tiler priority <name> [n] · /tiler priorities")
+        print("|cff00ff00Tiler:|r /tiler · /tiler debug · /tiler scan · /tiler allow <name> · /tiler remove <name> · /tiler list · /tiler priority <name> [n] · /tiler priorities · /tiler ui")
     end
 end

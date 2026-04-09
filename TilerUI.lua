@@ -1,0 +1,360 @@
+-- TilerUI.lua
+-- Management window for Tiler.  Open with /tiler ui.
+--
+-- Uses virtual row recycling: exactly NUM_VIS row frames sit at fixed
+-- positions inside a plain Frame.  Scrolling swaps their data content
+-- rather than moving a large content frame, avoiding WoW's scroll-frame
+-- mouse-event bleed outside the clip rect.
+--
+-- Hover-to-highlight (game frame glow + reverse-hover row highlight) is
+-- not yet implemented.
+
+local WIN_W   = 560
+local WIN_H   = 500
+local PAD     = 12
+local ROW_H   = 24
+local TITLE_H = 34   -- window top → column-header row
+local HDR_H   = 18   -- column-header row height
+local FOOT_H  = 38   -- reserved at the bottom for footer widgets
+
+local LIST_TOP = TITLE_H + HDR_H + 8           -- y from win top to list area
+local LIST_H   = WIN_H - LIST_TOP - FOOT_H     -- 402 px
+local NUM_VIS  = math.floor(LIST_H / ROW_H)    -- 16 fully-visible rows
+
+-- Column layout (x offsets relative to the list frame)
+local COL_VIS   = { x = 0,   w = 14  }
+local COL_NAME  = { x = 18,  w = 220 }
+local COL_SRC   = { x = 242, w = 50  }
+local COL_ALLOW = { x = 296, w = 72  }
+local COL_PRIO  = { x = 372, w = 138 }
+local INNER_W   = COL_PRIO.x + COL_PRIO.w     -- 510
+
+local SRC_COL = { core = "|cff888888", user = "|cff44aaff", scan = "|cff666666" }
+
+------------------------------------------------------------------------
+-- Module state
+------------------------------------------------------------------------
+TilerUI = {}
+
+local _win          = nil   -- main window; nil until first Toggle
+local _rows         = {}    -- exactly NUM_VIS row frames at fixed positions
+local _data         = {}    -- full sorted list from GetRows()
+local _scrollOffset = 0     -- 0-based index of first visible data entry
+
+------------------------------------------------------------------------
+-- GetRows — collect every window the user might care about
+------------------------------------------------------------------------
+local function GetRows()
+    local seen = {}
+    local list = {}
+
+    for name in pairs(Tiler.ALLOWED_NAMES) do
+        if not seen[name] then
+            seen[name] = true
+            list[#list+1] = { name=name, source="core", frame=_G[name], allowed=true }
+        end
+    end
+
+    for name in pairs(TilerDB.allowed or {}) do
+        if not seen[name] then
+            seen[name] = true
+            list[#list+1] = { name=name, source="user", frame=_G[name], allowed=true }
+        end
+    end
+
+    for _, f in ipairs({ UIParent:GetChildren() }) do
+        local ok, nm, w, h = pcall(function()
+            return f:GetName(), f:GetWidth() or 0, f:GetHeight() or 0
+        end)
+        if ok and nm and not seen[nm]
+           and f:IsVisible()
+           and w >= Tiler.MIN_WIDTH and h >= Tiler.MIN_HEIGHT
+        then
+            seen[nm] = true
+            list[#list+1] = { name=nm, source="scan", frame=f, allowed=false }
+        end
+    end
+
+    local ORD = { core=1, user=2, scan=3 }
+    table.sort(list, function(a, b)
+        local oa, ob = ORD[a.source], ORD[b.source]
+        if oa ~= ob then return oa < ob end
+        return a.name < b.name
+    end)
+
+    for i, d in ipairs(list) do d._idx = i end
+    return list
+end
+
+------------------------------------------------------------------------
+-- NewRow — create one row frame with all its child widgets
+-- Note: the row Frame itself has NO EnableMouse.  Buttons inside it
+-- receive clicks as Button frames independently; a row-level EnableMouse
+-- would silently swallow clicks on non-button areas and can interfere
+-- with button event dispatch in certain WoW Classic frame hierarchies.
+------------------------------------------------------------------------
+local function NewRow(parent)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetHeight(ROW_H)
+    row:SetWidth(INNER_W)
+
+    row.bg = row:CreateTexture(nil, "BACKGROUND")
+    row.bg:SetAllPoints(row)
+
+    row.dot = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.dot:SetPoint("LEFT", row, "LEFT", COL_VIS.x, 0)
+    row.dot:SetWidth(COL_VIS.w)
+    row.dot:SetJustifyH("CENTER")
+
+    row.nameFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.nameFS:SetPoint("LEFT", row, "LEFT", COL_NAME.x, 0)
+    row.nameFS:SetWidth(COL_NAME.w)
+    row.nameFS:SetJustifyH("LEFT")
+    row.nameFS:SetWordWrap(false)
+
+    row.srcFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.srcFS:SetPoint("LEFT", row, "LEFT", COL_SRC.x, 0)
+    row.srcFS:SetWidth(COL_SRC.w)
+    row.srcFS:SetJustifyH("CENTER")
+
+    local ab = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    ab:SetPoint("LEFT", row, "LEFT", COL_ALLOW.x, 0)
+    ab:SetSize(COL_ALLOW.w, ROW_H - 4)
+    row.allowBtn = ab
+
+    local bm = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    bm:SetPoint("LEFT", row, "LEFT", COL_PRIO.x, 0)
+    bm:SetSize(22, ROW_H - 4)
+    bm:SetText("-")
+    row.btnMinus = bm
+
+    row.prioFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.prioFS:SetPoint("LEFT", row, "LEFT", COL_PRIO.x + 25, 0)
+    row.prioFS:SetWidth(36)
+    row.prioFS:SetJustifyH("CENTER")
+
+    local bp = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    bp:SetPoint("LEFT", row, "LEFT", COL_PRIO.x + 64, 0)
+    bp:SetSize(22, ROW_H - 4)
+    bp:SetText("+")
+    row.btnPlus = bp
+
+    local bc = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    bc:SetPoint("LEFT", row, "LEFT", COL_PRIO.x + 90, 0)
+    bc:SetSize(30, ROW_H - 4)
+    bc:SetText("X")
+    row.btnClear = bc
+
+    return row
+end
+
+------------------------------------------------------------------------
+-- UpdateRow — populate row with data entry d (display slot idx, 1-based)
+------------------------------------------------------------------------
+local function UpdateRow(row, d, idx)
+    row._data = d
+    local f   = d.frame
+    local vis = f and f:IsShown()
+
+    if idx % 2 == 0 then
+        row.bg:SetColorTexture(0.08, 0.08, 0.10, 0.6)
+    else
+        row.bg:SetColorTexture(0.05, 0.05, 0.07, 0.4)
+    end
+
+    row.dot:SetText(vis and "|cff00ff00o|r" or "|cff444444o|r")
+    row.nameFS:SetText(vis and ("|cffffdd00"..d.name.."|r") or ("|cffaaaaaa"..d.name.."|r"))
+    row.srcFS:SetText((SRC_COL[d.source] or "")..d.source.."|r")
+
+    if d.source == "core" then
+        row.allowBtn:SetText("Core")
+        row.allowBtn:Disable()
+    elseif d.allowed then
+        row.allowBtn:SetText("ON")
+        row.allowBtn:Enable()
+        row.allowBtn:SetScript("OnClick", function()
+            Tiler.Disallow(d.name)
+            d.allowed = false
+            UpdateRow(row, d, idx)
+        end)
+    else
+        row.allowBtn:SetText("Allow")
+        row.allowBtn:Enable()
+        row.allowBtn:SetScript("OnClick", function()
+            Tiler.Allow(d.name)
+            d.allowed = true
+            UpdateRow(row, d, idx)
+        end)
+    end
+
+    local function refreshPrio()
+        local hp = TilerDB.priorities and TilerDB.priorities[d.name]
+        local np = Tiler.GetPriority(d.name)
+        row.prioFS:SetText(hp and ("|cffffdd00"..np.."|r") or ("|cff888888"..np.."|r"))
+    end
+    refreshPrio()
+
+    row.btnMinus:SetScript("OnClick", function()
+        Tiler.SetPriority(d.name, Tiler.GetPriority(d.name) - (IsShiftKeyDown() and 1 or 5))
+        refreshPrio()
+    end)
+    row.btnPlus:SetScript("OnClick", function()
+        Tiler.SetPriority(d.name, Tiler.GetPriority(d.name) + (IsShiftKeyDown() and 1 or 5))
+        refreshPrio()
+    end)
+    row.btnClear:SetScript("OnClick", function()
+        Tiler.ClearPriority(d.name)
+        refreshPrio()
+    end)
+end
+
+------------------------------------------------------------------------
+-- RefreshRows — repaint the NUM_VIS fixed rows from _data + _scrollOffset
+------------------------------------------------------------------------
+local function RefreshRows()
+    for i = 1, NUM_VIS do
+        local di  = _scrollOffset + i
+        local row = _rows[i]
+        if di <= #_data then
+            UpdateRow(row, _data[di], i)
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+
+    if _win then
+        local total    = #_data
+        local nAllowed = 0
+        for _, d in ipairs(_data) do
+            if d.source == "core" or d.allowed then nAllowed = nAllowed + 1 end
+        end
+        local scroll = total > NUM_VIS
+            and ("  ["..(  _scrollOffset + 1).."-"
+                 ..math.min(_scrollOffset + NUM_VIS, total).." / "..total.."]")
+            or  ""
+        _win.statusFS:SetText(total.." windows · "..nAllowed.." allowed"..scroll)
+    end
+end
+
+------------------------------------------------------------------------
+-- ScrollTo — clamp offset and redraw rows
+------------------------------------------------------------------------
+local function ScrollTo(offset)
+    local maxOff  = math.max(0, #_data - NUM_VIS)
+    _scrollOffset = math.max(0, math.min(offset, maxOff))
+    RefreshRows()
+end
+
+------------------------------------------------------------------------
+-- Build — construct the window once; left hidden
+------------------------------------------------------------------------
+local function Build()
+    local win = CreateFrame("Frame", "TilerUIWindow", UIParent)
+    win:SetSize(WIN_W, WIN_H)
+    win:SetPoint("CENTER")
+    win:SetMovable(true)
+    win:EnableMouse(true)
+    win:EnableMouseWheel(true)
+    win:RegisterForDrag("LeftButton")
+    win:SetScript("OnDragStart", win.StartMoving)
+    win:SetScript("OnDragStop",  win.StopMovingOrSizing)
+    win:SetScript("OnMouseWheel", function(_, delta)
+        ScrollTo(_scrollOffset - delta * 3)
+    end)
+    win:SetFrameStrata("HIGH")
+    win:SetToplevel(true)
+    if BackdropTemplateMixin then Mixin(win, BackdropTemplateMixin) end
+    win:SetBackdrop({
+        bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 32, edgeSize = 32,
+        insets = { left=11, right=12, top=12, bottom=11 },
+    })
+    win:SetBackdropColor(0, 0, 0, 1)
+    tinsert(UISpecialFrames, "TilerUIWindow")
+
+    -- Title
+    local title = win:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOP", win, "TOP", 0, -15)
+    title:SetText("Tiler — Window Manager")
+
+    local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", win, "TOPRIGHT", -5, -5)
+    close:SetScript("OnClick", function() win:Hide() end)
+
+    -- Column headers
+    local function Hdr(text, cx, cw, justify)
+        local fs = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        fs:SetPoint("TOPLEFT", win, "TOPLEFT", PAD + cx, -(TITLE_H + 2))
+        fs:SetWidth(cw)
+        fs:SetJustifyH(justify or "LEFT")
+        fs:SetText("|cffaaaaaa"..text.."|r")
+    end
+    Hdr("",         COL_VIS.x,   COL_VIS.w,   "CENTER")
+    Hdr("Window",   COL_NAME.x,  COL_NAME.w,  "LEFT")
+    Hdr("Source",   COL_SRC.x,   COL_SRC.w,   "CENTER")
+    Hdr("Allowed",  COL_ALLOW.x, COL_ALLOW.w, "CENTER")
+    Hdr("Priority", COL_PRIO.x,  COL_PRIO.w,  "LEFT")
+
+    -- Divider under headers
+    local div = win:CreateTexture(nil, "ARTWORK")
+    div:SetPoint("TOPLEFT",  win, "TOPLEFT",  PAD,  -(TITLE_H + HDR_H + 4))
+    div:SetPoint("TOPRIGHT", win, "TOPRIGHT", -PAD, -(TITLE_H + HDR_H + 4))
+    div:SetHeight(1)
+    div:SetColorTexture(0.4, 0.4, 0.4, 0.8)
+
+    -- Footer
+    local arrBtn = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
+    arrBtn:SetSize(110, 22)
+    arrBtn:SetPoint("BOTTOMLEFT", win, "BOTTOMLEFT", PAD + 8, 10)
+    arrBtn:SetText("Arrange Now")
+    arrBtn:SetScript("OnClick", function() Tiler.Arrange() end)
+
+    local refBtn = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
+    refBtn:SetSize(80, 22)
+    refBtn:SetPoint("LEFT", arrBtn, "RIGHT", 6, 0)
+    refBtn:SetText("Refresh")
+    refBtn:SetScript("OnClick", function() TilerUI.Refresh() end)
+
+    win.statusFS = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    win.statusFS:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -PAD, 13)
+    win.statusFS:SetJustifyH("RIGHT")
+
+    -- List area: plain Frame with NUM_VIS rows at fixed positions
+    local lf = CreateFrame("Frame", nil, win)
+    lf:SetPoint("TOPLEFT",     win, "TOPLEFT",     PAD,  -LIST_TOP)
+    lf:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -PAD, FOOT_H)
+
+    for i = 1, NUM_VIS do
+        local row = NewRow(lf)
+        row:SetPoint("TOPLEFT", lf, "TOPLEFT", 0, -(i - 1) * ROW_H)
+        _rows[i] = row
+        row:Hide()
+    end
+
+    win:Hide()
+    _win = win
+end
+
+------------------------------------------------------------------------
+-- Refresh — rebuild data and repaint rows
+------------------------------------------------------------------------
+function TilerUI.Refresh()
+    if not _win then return end
+    _data = GetRows()
+    ScrollTo(_scrollOffset)
+end
+
+------------------------------------------------------------------------
+-- Toggle — show or hide the window
+------------------------------------------------------------------------
+function TilerUI.Toggle()
+    if not _win then Build() end
+    if _win:IsShown() then
+        _win:Hide()
+    else
+        _win:Show()
+        TilerUI.Refresh()
+    end
+end
