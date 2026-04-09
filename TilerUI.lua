@@ -10,7 +10,7 @@
 -- not yet implemented.
 
 local WIN_W   = 560
-local WIN_H   = 500
+local WIN_H   = 650
 local PAD     = 12
 local ROW_H   = 24
 local TITLE_H = 34   -- window top → column-header row
