@@ -26,8 +26,8 @@ local COL_VIS   = { x = 0,   w = 14  }
 local COL_NAME  = { x = 18,  w = 220 }
 local COL_SRC   = { x = 242, w = 50  }
 local COL_ALLOW = { x = 296, w = 72  }
-local COL_PRIO  = { x = 372, w = 120 }
-local INNER_W   = COL_PRIO.x + COL_PRIO.w     -- 492
+local COL_PRIO  = { x = 372, w = 70 }
+local INNER_W   = COL_PRIO.x + COL_PRIO.w     -- 442
 
 local SRC_COL   = { default = "|cff888888", user = "|cff44aaff", scan = "|cff666666" }
 local CHECK_TEX = "|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t"
