@@ -356,5 +356,6 @@ function TilerUI.Toggle()
     else
         _win:Show()
         TilerUI.Refresh()
+        Tiler.Schedule()   -- re-resolve hooks (TilerUIWindow is lazily created)
     end
 end
