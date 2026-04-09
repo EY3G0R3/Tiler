@@ -66,6 +66,7 @@ local ALLOWED_NAMES = {
     BankFrame             = true,
     MailFrame             = true,
     MerchantFrame         = true,
+    TaxiFrame             = true,
     ChannelFrame          = true,
     -- Addon windows
     TilerUIWindow                              = true,
