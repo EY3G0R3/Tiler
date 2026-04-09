@@ -58,6 +58,7 @@ local ALLOWED_NAMES = {
     MerchantFrame         = true,
     ChannelFrame          = true,
     -- Addon windows
+    GrouperMainFrame                           = true,
     SkilletFrame                               = true,
     Questie_BasseFrame                         = true,
     Baganator_CategoryViewBankViewFrameelvui   = true,
@@ -332,6 +333,9 @@ local function HookFrame(frame)
     _hookedFrames[frame] = true
     frame:HookScript("OnShow", ScheduleAutoTile)
     frame:HookScript("OnHide", ScheduleAutoTile)
+    -- If the frame is already visible when we first hook it (lazy creation),
+    -- fire auto-tile now so the layout includes it immediately.
+    if frame:IsShown() then ScheduleAutoTile() end
 end
 
 local function HookAllowedFrames()
@@ -350,9 +354,18 @@ end
 -- up frames the moment each addon creates them.
 initFrame:RegisterEvent("ADDON_LOADED")
 initFrame:RegisterEvent("PLAYER_LOGIN")
-initFrame:SetScript("OnEvent", function(self, event)
+initFrame:SetScript("OnEvent", function(self, event, addonName)
     if event == "ADDON_LOADED" then
         HookAllowedFrames()
+        -- Grouper uses AceGUI and re-creates GrouperMainFrame on every open/close
+        -- cycle, so we hook CreateMainWindow to re-hook the new frame each time.
+        if addonName == "Grouper" and Grouper and Grouper.CreateMainWindow then
+            hooksecurefunc(Grouper, "CreateMainWindow", function(g)
+                if g.mainFrame and g.mainFrame.frame then
+                    HookFrame(g.mainFrame.frame)
+                end
+            end)
+        end
     elseif event == "PLAYER_LOGIN" then
         TilerDB = TilerDB or {}
         TilerDB.allowed     = TilerDB.allowed     or {}
