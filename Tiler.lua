@@ -155,6 +155,27 @@ _enforcer:SetScript("OnUpdate", function(self, dt)
 end)
 
 ------------------------------------------------------------------------
+-- Smart layout patterns
+-- Maps window count → list of per-row frame counts.
+-- Each row is centered horizontally on the screen.
+-- Counts not listed here fall back to left-to-right wrapping.
+------------------------------------------------------------------------
+local LAYOUT_PATTERNS = {
+    [1]  = {1},
+    [2]  = {2},
+    [3]  = {3},
+    [4]  = {2, 2},
+    [5]  = {3, 2},
+    [6]  = {3, 3},
+    [7]  = {4, 3},
+    [8]  = {4, 4},
+    [9]  = {3, 3, 3},
+    [10] = {4, 3, 3},
+    [11] = {4, 4, 3},
+    [12] = {4, 4, 4},
+}
+
+------------------------------------------------------------------------
 -- Placement
 ------------------------------------------------------------------------
 local function ArrangeWindows(silent)
@@ -174,28 +195,63 @@ local function ArrangeWindows(silent)
         return
     end
 
-    local sw        = UIParent:GetWidth()
-    local sh        = UIParent:GetHeight()
-    local curX      = LEFT_MARGIN
-    local curY      = sh - TOP_MARGIN
-    local rowBottom = curY
+    local sw = UIParent:GetWidth()
+    local sh = UIParent:GetHeight()
 
     local placements = {}
-    for _, frame in ipairs(frames) do
-        local fw = frame:GetWidth()
-        local fh = frame:GetHeight()
+    local pattern = LAYOUT_PATTERNS[#frames]
 
-        if curX > LEFT_MARGIN and curX + fw > sw then
-            curY      = rowBottom - GAP
-            curX      = LEFT_MARGIN
-            rowBottom = curY
+    if pattern then
+        -- Smart layout: distribute frames across rows per the pattern and
+        -- center each row horizontally.
+        local fi   = 1
+        local curY = sh - TOP_MARGIN
+
+        for _, rowCount in ipairs(pattern) do
+            -- Sum the widths of frames in this row.
+            local totalW = -GAP
+            for i = fi, fi + rowCount - 1 do
+                if frames[i] then totalW = totalW + (frames[i]:GetWidth() or 0) + GAP end
+            end
+            -- Center the row; clamp so nothing slides off the left edge.
+            local curX      = math.max(LEFT_MARGIN, math.floor((sw - totalW) / 2))
+            local rowBottom = curY
+
+            for i = fi, fi + rowCount - 1 do
+                local frame = frames[i]
+                if frame then
+                    placements[#placements + 1] = { frame = frame, x = curX, y = curY }
+                    local bottom = curY - (frame:GetHeight() or 0)
+                    if bottom < rowBottom then rowBottom = bottom end
+                    curX = curX + (frame:GetWidth() or 0) + GAP
+                end
+            end
+
+            fi   = fi + rowCount
+            curY = rowBottom - GAP
         end
+    else
+        -- Fallback for 13+ windows: left-to-right with wrapping.
+        local curX      = LEFT_MARGIN
+        local curY      = sh - TOP_MARGIN
+        local rowBottom = curY
 
-        placements[#placements + 1] = { frame = frame, x = curX, y = curY }
+        for _, frame in ipairs(frames) do
+            local fw = frame:GetWidth()
+            local fh = frame:GetHeight()
 
-        local bottom = curY - fh
-        if bottom < rowBottom then rowBottom = bottom end
-        curX = curX + fw + GAP
+            if curX > LEFT_MARGIN and curX + fw > sw then
+                curY      = rowBottom - GAP
+                curX      = LEFT_MARGIN
+                rowBottom = curY
+            end
+
+            placements[#placements + 1] = { frame = frame, x = curX, y = curY }
+
+            local bottom = curY - fh
+            if bottom < rowBottom then rowBottom = bottom end
+            curX = curX + fw + GAP
+        end
     end
 
     -- Apply positions immediately, then keep enforcing for ENFORCE_SECS.
