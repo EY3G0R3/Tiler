@@ -74,6 +74,8 @@ local ALLOWED_NAMES = {
     Questie_BasseFrame                         = true,
     Baganator_CategoryViewBankViewFrameelvui   = true,
     Baganator_CategoryViewBackpackViewFrameelvui = true,
+    -- ElvUI/ToxiUI skins the standard WorldMapFrame but keeps the name
+    WorldMapFrame                              = true,
 }
 
 local function IsAllowed(name)
