@@ -392,18 +392,26 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
     if event == "ADDON_LOADED" then
         HookAllowedFrames()
         -- Grouper uses AceGUI and re-creates GrouperMainFrame on every open/close
-        -- cycle, so we hook CreateMainWindow to re-hook the new frame each time.
-        if addonName == "Grouper" and Grouper and Grouper.CreateMainWindow then
-            hooksecurefunc(Grouper, "CreateMainWindow", function(g)
-                if g.mainFrame and g.mainFrame.frame then
-                    local f = g.mainFrame.frame
-                    _allowedObjects[f] = true
-                    HookFrame(f)
-                end
-                -- Fire directly: the frame may already be shown by the time
-                -- this post-hook runs, so OnShow may never fire for this open.
-                ScheduleAutoTile()
-            end)
+        -- cycle. Hook CreateMainWindow to register the new WoW frame each time,
+        -- and ToggleMainWindow as a backup trigger so ScheduleAutoTile fires on
+        -- every open/close even if the frame was already shown by the time the
+        -- CreateMainWindow post-hook runs.
+        if addonName == "Grouper" and Grouper then
+            if Grouper.CreateMainWindow then
+                hooksecurefunc(Grouper, "CreateMainWindow", function(g)
+                    if g.mainFrame and g.mainFrame.frame then
+                        local f = g.mainFrame.frame
+                        _allowedObjects[f] = true
+                        HookFrame(f)
+                    end
+                    ScheduleAutoTile()
+                end)
+            end
+            if Grouper.ToggleMainWindow then
+                hooksecurefunc(Grouper, "ToggleMainWindow", function()
+                    ScheduleAutoTile()
+                end)
+            end
         end
     elseif event == "PLAYER_LOGIN" then
         TilerDB = TilerDB or {}
