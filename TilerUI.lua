@@ -9,7 +9,7 @@
 -- Hover-to-highlight (game frame glow + reverse-hover row highlight) is
 -- not yet implemented.
 
-local WIN_W   = 560
+local WIN_W   = 490
 local WIN_H   = 650
 local PAD     = 12
 local ROW_H   = 24
@@ -22,7 +22,7 @@ local LIST_H   = WIN_H - LIST_TOP - FOOT_H     -- 402 px
 local NUM_VIS  = math.floor(LIST_H / ROW_H)    -- 16 fully-visible rows
 
 -- Column layout (x offsets relative to the list frame)
-local COL_NAME  = { x = 0,   w = 238 }
+local COL_NAME  = { x = 4,   w = 234 }
 local COL_SRC   = { x = 242, w = 50  }
 local COL_ALLOW = { x = 296, w = 72  }
 local COL_PRIO  = { x = 372, w = 70 }
