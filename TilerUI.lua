@@ -178,7 +178,6 @@ local function UpdateRow(row, d, idx)
     if d._gap then
         row.bg:SetColorTexture(0, 0, 0, 0)
         row.divider:Show()
-        row.dot:SetText("")
         row.nameFS:SetText("")
         row.srcFS:SetText("")
         row.allowBtn:Hide()
