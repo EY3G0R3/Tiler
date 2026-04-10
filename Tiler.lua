@@ -202,10 +202,10 @@ local function ArrangeWindows(silent)
     local placements = {}
 
     if #frames == 1 then
-        -- Single window: center of right half of screen.
+        -- Single window: center of left half of screen.
         local frame = frames[1]
         local fw, fh = frame:GetWidth() or 0, frame:GetHeight() or 0
-        local x = math.floor(sw * 3 / 4 - fw / 2)
+        local x = math.floor(sw / 4 - fw / 2)
         local y = math.floor(sh / 2 + fh / 2)
         placements[1] = { frame = frame, x = x, y = y }
 
