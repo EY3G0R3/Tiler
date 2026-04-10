@@ -22,8 +22,7 @@ local LIST_H   = WIN_H - LIST_TOP - FOOT_H     -- 402 px
 local NUM_VIS  = math.floor(LIST_H / ROW_H)    -- 16 fully-visible rows
 
 -- Column layout (x offsets relative to the list frame)
-local COL_VIS   = { x = 0,   w = 14  }
-local COL_NAME  = { x = 18,  w = 220 }
+local COL_NAME  = { x = 0,   w = 238 }
 local COL_SRC   = { x = 242, w = 50  }
 local COL_ALLOW = { x = 296, w = 72  }
 local COL_PRIO  = { x = 372, w = 70 }
@@ -141,11 +140,6 @@ local function NewRow(parent)
     row.divider:SetColorTexture(0.35, 0.35, 0.35, 0.7)
     row.divider:Hide()
 
-    row.dot = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    row.dot:SetPoint("LEFT", row, "LEFT", COL_VIS.x, 0)
-    row.dot:SetWidth(COL_VIS.w)
-    row.dot:SetJustifyH("CENTER")
-
     row.nameFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     row.nameFS:SetPoint("LEFT", row, "LEFT", COL_NAME.x, 0)
     row.nameFS:SetWidth(COL_NAME.w)
@@ -205,7 +199,6 @@ local function UpdateRow(row, d, idx)
         row.bg:SetColorTexture(0.05, 0.05, 0.07, 0.4)
     end
 
-    row.dot:SetText(vis and "|cff00ff00o|r" or "|cff444444o|r")
     row.nameFS:SetText(vis and ("|cffffdd00"..d.name.."|r") or ("|cffaaaaaa"..d.name.."|r"))
     row.srcFS:SetText((SRC_COL[d.source] or "")..d.source.."|r")
 
@@ -351,7 +344,6 @@ local function Build()
         fs:SetJustifyH(justify or "LEFT")
         fs:SetText("|cffaaaaaa"..text.."|r")
     end
-    Hdr("",         COL_VIS.x,   COL_VIS.w,   "CENTER")
     Hdr("Window",   COL_NAME.x,  COL_NAME.w,  "LEFT")
     Hdr("Source",   COL_SRC.x,   COL_SRC.w,   "CENTER")
     Hdr("Tile",     COL_ALLOW.x, COL_ALLOW.w, "CENTER")
