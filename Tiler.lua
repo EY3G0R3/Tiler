@@ -542,6 +542,8 @@ Tiler = {
     Disallow = function(name)
         if not name or name == "" then return end
         TilerDB.allowed[name] = nil
+        local f = _G[name]
+        if f then _allowedObjects[f] = nil end
         ScheduleAutoTile()
     end,
     SetPriority = function(name, n)
