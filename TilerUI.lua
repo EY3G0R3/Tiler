@@ -5,9 +5,6 @@
 -- positions inside a plain Frame.  Scrolling swaps their data content
 -- rather than moving a large content frame, avoiding WoW's scroll-frame
 -- mouse-event bleed outside the clip rect.
---
--- Hover-to-highlight (game frame glow + reverse-hover row highlight) is
--- not yet implemented.
 
 local WIN_W   = 490
 local WIN_H   = 650
@@ -120,15 +117,17 @@ end
 
 ------------------------------------------------------------------------
 -- NewRow — create one row frame with all its child widgets
--- Note: the row Frame itself has NO EnableMouse.  Buttons inside it
--- receive clicks as Button frames independently; a row-level EnableMouse
--- would silently swallow clicks on non-button areas and can interfere
--- with button event dispatch in certain WoW Classic frame hierarchies.
+-- EnableMouse is set on the row Frame itself.  Because ab and eb are
+-- children of row, WoW always gives children priority over their parent
+-- in hit-testing, so ab/eb remain fully clickable while row catches
+-- hover over the text/background regions.  OnLeave uses MouseIsOver(row)
+-- to avoid flickering when the cursor moves between row ↔ ab ↔ eb.
 ------------------------------------------------------------------------
 local function NewRow(parent)
     local row = CreateFrame("Frame", nil, parent)
     row:SetHeight(ROW_H)
     row:SetWidth(INNER_W)
+    row:EnableMouse(true)
 
     row.bg = row:CreateTexture(nil, "BACKGROUND")
     row.bg:SetAllPoints(row)
@@ -165,6 +164,26 @@ local function NewRow(parent)
     eb:SetJustifyH("CENTER")
     row.prioEB = eb
 
+    local function setHighlight(on)
+        if not row._data or row._data._gap then return end
+        if on then
+            row.bg:SetColorTexture(0.22, 0.18, 0.06, 0.85)
+        elseif row._slotIdx and row._slotIdx % 2 == 0 then
+            row.bg:SetColorTexture(0.08, 0.08, 0.10, 0.6)
+        else
+            row.bg:SetColorTexture(0.05, 0.05, 0.07, 0.4)
+        end
+    end
+    local function onLeave()
+        if not MouseIsOver(row) then setHighlight(false) end
+    end
+    row:SetScript("OnEnter", function() setHighlight(true) end)
+    row:SetScript("OnLeave", onLeave)
+    ab:SetScript("OnEnter",  function() setHighlight(true) end)
+    ab:SetScript("OnLeave",  onLeave)
+    eb:SetScript("OnEnter",  function() setHighlight(true) end)
+    eb:SetScript("OnLeave",  onLeave)
+
     return row
 end
 
@@ -172,7 +191,8 @@ end
 -- UpdateRow — populate row with data entry d (display slot idx, 1-based)
 ------------------------------------------------------------------------
 local function UpdateRow(row, d, idx)
-    row._data = d
+    row._data    = d
+    row._slotIdx = idx
 
     -- Gap/separator row
     if d._gap then
