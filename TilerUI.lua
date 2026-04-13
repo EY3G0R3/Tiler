@@ -73,6 +73,16 @@ local function GetRows()
         end
     end
 
+    -- Object-tracked frames (e.g. unnamed AceGUI windows like MailBank) that
+    -- won't appear in any of the name-based loops above.
+    for f in pairs(Tiler.AllowedObjects) do
+        local nm = Tiler.AllowedObjectNames[f] or f:GetName()
+        if nm and not seen[nm] then
+            seen[nm] = true
+            list[#list+1] = { name=nm, source="default", frame=f, allowed=true }
+        end
+    end
+
     -- Split into three groups:
     --   g1: visible + tiling enabled
     --   g2: visible + tiling disabled

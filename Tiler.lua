@@ -34,7 +34,10 @@ local initFrame = CreateFrame("Frame")
 
 -- Frames allowed by object reference rather than name (e.g. unnamed AceGUI frames).
 -- Populated by HookAllowedFrames and addon-specific hooks.
-local _allowedObjects = {}
+local _allowedObjects     = {}
+-- Display names for object-tracked frames that have no GetName().
+-- Keys mirror _allowedObjects; values are the label shown in TilerUI.
+local _allowedObjectNames = {}
 
 -- Forward declaration: defined in the Auto-tile section below, but called
 -- from ArrangeWindows so it needs to be declared in scope first.
@@ -457,6 +460,7 @@ HookAllowedFrames = function()
         local f = inv:GetParent()
         if f and f ~= UIParent then
             _allowedObjects[f] = true
+            _allowedObjectNames[f] = "MailBank"
             HookFrame(f)
         end
     end
@@ -525,13 +529,15 @@ _arrangeBtn:SetScript("OnClick", function() ArrangeWindows() end)
 -- Public API (consumed by TilerUI.lua)
 ------------------------------------------------------------------------
 Tiler = {
-    ALLOWED_NAMES = ALLOWED_NAMES,
-    MIN_WIDTH     = MIN_WIDTH,
-    MIN_HEIGHT    = MIN_HEIGHT,
-    IsAllowed     = IsAllowed,
-    GetPriority   = GetPriority,
-    Arrange       = ArrangeWindows,
-    Schedule      = ScheduleAutoTile,
+    ALLOWED_NAMES      = ALLOWED_NAMES,
+    MIN_WIDTH          = MIN_WIDTH,
+    MIN_HEIGHT         = MIN_HEIGHT,
+    IsAllowed          = IsAllowed,
+    GetPriority        = GetPriority,
+    Arrange            = ArrangeWindows,
+    Schedule           = ScheduleAutoTile,
+    AllowedObjects     = _allowedObjects,
+    AllowedObjectNames = _allowedObjectNames,
     Allow = function(name)
         if not name or name == "" then return end
         TilerDB.allowed[name] = true
