@@ -76,6 +76,7 @@ local ALLOWED_NAMES = {
     GrouperMainFrame                           = true,
     SkilletFrame                               = true,
     Questie_BasseFrame                         = true,
+    ItemRackOptFrame                           = true,
     Baganator_CategoryViewBankViewFrameelvui   = true,
     Baganator_CategoryViewBackpackViewFrameelvui = true,
     -- ElvUI/ToxiUI skins the standard WorldMapFrame but keeps the name
@@ -109,8 +110,17 @@ end
 
 local function DiscoverFrames()
     local frames = {}
+    local seen   = {}
     for _, f in ipairs({ UIParent:GetChildren() }) do
+        seen[f] = true
         pcall(TryAddFrame, frames, f)
+    end
+    -- Second pass: allowed frames that aren't direct UIParent children
+    -- (e.g. ItemRackOptFrame, which has no explicit parent= in its XML).
+    for f in pairs(_allowedObjects) do
+        if not seen[f] then
+            pcall(TryAddFrame, frames, f)
+        end
     end
     -- Sort by explicit priority first; ties fall back to current visual order.
     table.sort(frames, function(a, b)
@@ -509,6 +519,9 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
     if event == "ADDON_LOADED" then
         HookAllowedFrames()
         if addonName == "Grouper" then HookGrouper() end
+        -- ItemRackOptions is Load-on-Demand; re-hook + auto-tile when it loads
+        -- so ItemRackOptFrame is picked up the moment it first exists.
+        if addonName == "ItemRackOptions" then ScheduleAutoTile() end
     elseif event == "PLAYER_LOGIN" then
         TilerDB = TilerDB or {}
         TilerDB.allowed     = TilerDB.allowed     or {}
