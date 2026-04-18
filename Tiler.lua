@@ -67,6 +67,7 @@ local ALLOWED_NAMES = {
     CraftFrame            = true,
     TradeFrame            = true,
     BankFrame             = true,
+    PetStableFrame        = true,
     MailFrame             = true,
     MerchantFrame         = true,
     TaxiFrame             = true,
