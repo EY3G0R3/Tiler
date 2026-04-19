@@ -39,9 +39,11 @@ local _allowedObjects     = {}
 -- Keys mirror _allowedObjects; values are the label shown in TilerUI.
 local _allowedObjectNames = {}
 
--- Forward declaration: defined in the Auto-tile section below, but called
--- from ArrangeWindows so it needs to be declared in scope first.
+-- Forward declarations: defined after the auto-tile helpers, but called
+-- earlier (ArrangeWindows, event handler).
 local HookAllowedFrames
+local HookTOGBankClassic
+local HookProfessionMaster
 
 ------------------------------------------------------------------------
 -- Hardcoded allowlist
@@ -519,7 +521,7 @@ end
 -- Hook DrawWindow so the WoW frame is registered the moment it first exists.
 ------------------------------------------------------------------------
 local _togBankHooked = false
-local function HookTOGBankClassic()
+HookTOGBankClassic = function()
     if _togBankHooked or not TOGBankClassic_UI_Inventory then return end
     _togBankHooked = true
     hooksecurefunc(TOGBankClassic_UI_Inventory, "DrawWindow", function(inv)
@@ -547,7 +549,7 @@ end
 -- is retried from HookAllowedFrames until professionsView is available.
 ------------------------------------------------------------------------
 local _professionMasterHooked = false
-local function HookProfessionMaster()
+HookProfessionMaster = function()
     if _professionMasterHooked then return end
     local pv = professionMaster and professionMaster.professionsView
     if not pv then return end
