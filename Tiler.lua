@@ -532,8 +532,9 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
         end
         HookAllowedFrames()
         HookGrouper()  -- catches the case where Grouper loaded before Tiler
-        self:UnregisterEvent("ADDON_LOADED")
         self:UnregisterEvent("PLAYER_LOGIN")
+        -- Keep ADDON_LOADED registered so LoD addons (e.g. ItemRackOptions)
+        -- that load after login still get their frames hooked.
     end
 end)
 
