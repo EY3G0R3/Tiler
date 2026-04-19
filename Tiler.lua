@@ -475,6 +475,8 @@ HookAllowedFrames = function()
             HookFrame(f)
         end
     end
+    HookTOGBankClassic()
+    HookProfessionMaster()
 end
 
 ------------------------------------------------------------------------
@@ -511,6 +513,60 @@ local function HookGrouper()
     end
 end
 
+------------------------------------------------------------------------
+-- TOGBankClassic hook
+-- The inventory window is an AceGUI Frame created lazily in DrawWindow().
+-- Hook DrawWindow so the WoW frame is registered the moment it first exists.
+------------------------------------------------------------------------
+local _togBankHooked = false
+local function HookTOGBankClassic()
+    if _togBankHooked or not TOGBankClassic_UI_Inventory then return end
+    _togBankHooked = true
+    hooksecurefunc(TOGBankClassic_UI_Inventory, "DrawWindow", function(inv)
+        if inv.Window and inv.Window.frame then
+            local f = inv.Window.frame
+            _allowedObjects[f]     = true
+            _allowedObjectNames[f] = "TOGBankClassic"
+            HookFrame(f)
+        end
+    end)
+    -- Window may already exist if the hook fires after first open.
+    local existing = TOGBankClassic_UI_Inventory.Window
+    if existing and existing.frame then
+        local f = existing.frame
+        _allowedObjects[f]     = true
+        _allowedObjectNames[f] = "TOGBankClassic"
+        HookFrame(f)
+    end
+end
+
+------------------------------------------------------------------------
+-- ProfessionMaster hook
+-- The professions window is created lazily inside professionsView:Show().
+-- professionsView is only assigned at PLAYER_LOGIN, so the hook attempt
+-- is retried from HookAllowedFrames until professionsView is available.
+------------------------------------------------------------------------
+local _professionMasterHooked = false
+local function HookProfessionMaster()
+    if _professionMasterHooked then return end
+    local pv = professionMaster and professionMaster.professionsView
+    if not pv then return end
+    _professionMasterHooked = true
+    hooksecurefunc(pv, "Show", function(self)
+        if self.view and not _allowedObjects[self.view] then
+            _allowedObjects[self.view]     = true
+            _allowedObjectNames[self.view] = "ProfessionMaster"
+            HookFrame(self.view)
+        end
+    end)
+    -- View may already exist if the hook fires after first open.
+    if pv.view then
+        _allowedObjects[pv.view]     = true
+        _allowedObjectNames[pv.view] = "ProfessionMaster"
+        HookFrame(pv.view)
+    end
+end
+
 -- Wire up initFrame now that HookAllowedFrames is defined.
 -- ADDON_LOADED fires once per addon (before PLAYER_LOGIN) so we can pick
 -- up frames the moment each addon creates them.
@@ -519,7 +575,9 @@ initFrame:RegisterEvent("PLAYER_LOGIN")
 initFrame:SetScript("OnEvent", function(self, event, addonName)
     if event == "ADDON_LOADED" then
         HookAllowedFrames()
-        if addonName == "Grouper" then HookGrouper() end
+        if addonName == "Grouper"          then HookGrouper() end
+        if addonName == "TOGBankClassic"   then HookTOGBankClassic() end
+        if addonName == "ProfessionMaster" then HookProfessionMaster() end
         -- ItemRackOptions is Load-on-Demand; re-hook + auto-tile when it loads
         -- so ItemRackOptFrame is picked up the moment it first exists.
         if addonName == "ItemRackOptions" then ScheduleAutoTile() end
@@ -531,7 +589,9 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
             SetBindingClick("CTRL-T", "TilerArrangeButton", "LeftButton")
         end
         HookAllowedFrames()
-        HookGrouper()  -- catches the case where Grouper loaded before Tiler
+        HookGrouper()           -- catches the case where Grouper loaded before Tiler
+        HookTOGBankClassic()
+        HookProfessionMaster()
         self:UnregisterEvent("PLAYER_LOGIN")
         -- Keep ADDON_LOADED registered so LoD addons (e.g. ItemRackOptions)
         -- that load after login still get their frames hooked.
