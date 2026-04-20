@@ -529,6 +529,28 @@ local _addonHookSpecs = {
             if pv.view then register(pv.view) end
         end,
     },
+    {
+        -- TOGProfessionMaster creates its AceGUI window lazily in
+        -- MainWindow:Open() and releases it on close (frame is recreated
+        -- each time). Hook Open so every new WoW frame gets registered.
+        addon  = "TOGProfessionMaster",
+        ready  = function()
+            return TOGPM ~= nil
+               and TOGPM.addon ~= nil
+               and TOGPM.addon.MainWindow ~= nil
+        end,
+        setup  = function(register)
+            local mw = TOGPM.addon.MainWindow
+            hooksecurefunc(mw, "Open", function(self)
+                if self.frame and self.frame.frame then
+                    register(self.frame.frame)
+                end
+            end)
+            if mw.frame and mw.frame.frame then
+                register(mw.frame.frame)
+            end
+        end,
+    },
 }
 
 local function TryAddonHooks()
