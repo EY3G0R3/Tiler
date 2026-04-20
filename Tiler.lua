@@ -39,11 +39,9 @@ local _allowedObjects     = {}
 -- Keys mirror _allowedObjects; values are the label shown in TilerUI.
 local _allowedObjectNames = {}
 
--- Forward declarations: defined after the auto-tile helpers, but called
--- earlier (ArrangeWindows, event handler).
+-- Forward declaration: HookAllowedFrames is defined after the auto-tile
+-- helpers but called earlier (from ArrangeWindows).
 local HookAllowedFrames
-local HookTOGBankClassic
-local HookProfessionMaster
 
 ------------------------------------------------------------------------
 -- Hardcoded allowlist
@@ -452,6 +450,104 @@ local function HookFrame(frame)
     if frame:IsShown() then ScheduleAutoTile() end
 end
 
+------------------------------------------------------------------------
+-- Addon-specific frame hooks
+--
+-- To support a new addon, add one entry to this table. Fields:
+--   addon   WoW addon name (string) — for documentation only
+--   label   display name in TilerUI (defaults to addon)
+--   ready   optional function(); setup waits until ready() is true
+--   setup   function(register) called once when ready;
+--           call register(frame) to tile a frame;
+--           may call hooksecurefunc to call register on future frames
+------------------------------------------------------------------------
+local _addonHookSpecs = {
+    {
+        -- MailBank: the tileable frame is the unnamed AceGUI parent of
+        -- the named InventoryUIFrame child — walk up one level to find it.
+        addon  = "MailBank",
+        ready  = function()
+            local inv = _G["InventoryUIFrame"]
+            return inv ~= nil and inv:GetParent() ~= UIParent
+        end,
+        setup  = function(register)
+            register(_G["InventoryUIFrame"]:GetParent())
+        end,
+    },
+    {
+        -- Grouper re-creates its AceGUI window on every open/close cycle.
+        -- Hook CreateMainWindow to catch each new frame; also hook
+        -- ToggleMainWindow as a backup auto-tile trigger.
+        addon  = "Grouper",
+        ready  = function()
+            return Grouper ~= nil
+               and (Grouper.CreateMainWindow ~= nil or Grouper.ToggleMainWindow ~= nil)
+        end,
+        setup  = function(register)
+            if Grouper.CreateMainWindow then
+                hooksecurefunc(Grouper, "CreateMainWindow", function(g)
+                    if g.mainFrame and g.mainFrame.frame then
+                        register(g.mainFrame.frame)
+                    end
+                    ScheduleAutoTile()
+                end)
+            end
+            if Grouper.ToggleMainWindow then
+                hooksecurefunc(Grouper, "ToggleMainWindow", ScheduleAutoTile)
+            end
+        end,
+    },
+    {
+        -- TOGBankClassic creates its AceGUI inventory window lazily in
+        -- DrawWindow(). Hook it so the WoW frame is registered on first open.
+        addon  = "TOGBankClassic",
+        ready  = function() return TOGBankClassic_UI_Inventory ~= nil end,
+        setup  = function(register)
+            hooksecurefunc(TOGBankClassic_UI_Inventory, "DrawWindow", function(inv)
+                if inv.Window and inv.Window.frame then
+                    register(inv.Window.frame)
+                end
+            end)
+            local w = TOGBankClassic_UI_Inventory.Window
+            if w and w.frame then register(w.frame) end
+        end,
+    },
+    {
+        -- ProfessionMaster creates its view lazily inside professionsView:Show().
+        -- professionsView itself is only assigned at PLAYER_LOGIN, so ready()
+        -- waits for both the addon and its post-login state.
+        addon  = "ProfessionMaster",
+        ready  = function()
+            return professionMaster ~= nil
+               and professionMaster.professionsView ~= nil
+        end,
+        setup  = function(register)
+            local pv = professionMaster.professionsView
+            hooksecurefunc(pv, "Show", function(self)
+                if self.view then register(self.view) end
+            end)
+            if pv.view then register(pv.view) end
+        end,
+    },
+}
+
+local function TryAddonHooks()
+    for _, spec in ipairs(_addonHookSpecs) do
+        if not spec._done then
+            if not spec.ready or spec.ready() then
+                spec._done = true
+                local label = spec.label or spec.addon
+                spec.setup(function(f)
+                    if not f then return end
+                    _allowedObjects[f]     = true
+                    _allowedObjectNames[f] = label
+                    HookFrame(f)
+                end)
+            end
+        end
+    end
+end
+
 HookAllowedFrames = function()
     for name in pairs(ALLOWED_NAMES) do
         local f = _G[name]
@@ -465,108 +561,7 @@ HookAllowedFrames = function()
             HookFrame(f)
         end
     end
-    -- MailBank: aceFrame is a module-local AceGUI widget (not in _G).
-    -- InventoryUIFrame is a named child of aceFrame.frame, so we find the
-    -- tileable frame by walking up one parent level.
-    local inv = _G["InventoryUIFrame"]
-    if inv then
-        local f = inv:GetParent()
-        if f and f ~= UIParent then
-            _allowedObjects[f] = true
-            _allowedObjectNames[f] = "MailBank"
-            HookFrame(f)
-        end
-    end
-    HookTOGBankClassic()
-    HookProfessionMaster()
-end
-
-------------------------------------------------------------------------
--- Grouper hooks
--- Grouper uses AceGUI and re-creates GrouperMainFrame on every open/close
--- cycle. Hook CreateMainWindow to register the new WoW frame each time,
--- and ToggleMainWindow as a backup trigger so ScheduleAutoTile fires on
--- every open/close even if the frame was already shown by the time the
--- CreateMainWindow post-hook runs.
---
--- These hooks are attempted in both ADDON_LOADED (when Tiler loads first,
--- before Grouper) and PLAYER_LOGIN (when Grouper loads first, before Tiler,
--- so we miss Grouper's ADDON_LOADED event). A guard prevents double-hooking.
-------------------------------------------------------------------------
-local _grouperHooked = false
-local function HookGrouper()
-    if _grouperHooked or not Grouper then return end
-    if not Grouper.CreateMainWindow and not Grouper.ToggleMainWindow then return end
-    _grouperHooked = true
-    if Grouper.CreateMainWindow then
-        hooksecurefunc(Grouper, "CreateMainWindow", function(g)
-            if g.mainFrame and g.mainFrame.frame then
-                local f = g.mainFrame.frame
-                _allowedObjects[f] = true
-                HookFrame(f)
-            end
-            ScheduleAutoTile()
-        end)
-    end
-    if Grouper.ToggleMainWindow then
-        hooksecurefunc(Grouper, "ToggleMainWindow", function()
-            ScheduleAutoTile()
-        end)
-    end
-end
-
-------------------------------------------------------------------------
--- TOGBankClassic hook
--- The inventory window is an AceGUI Frame created lazily in DrawWindow().
--- Hook DrawWindow so the WoW frame is registered the moment it first exists.
-------------------------------------------------------------------------
-local _togBankHooked = false
-HookTOGBankClassic = function()
-    if _togBankHooked or not TOGBankClassic_UI_Inventory then return end
-    _togBankHooked = true
-    hooksecurefunc(TOGBankClassic_UI_Inventory, "DrawWindow", function(inv)
-        if inv.Window and inv.Window.frame then
-            local f = inv.Window.frame
-            _allowedObjects[f]     = true
-            _allowedObjectNames[f] = "TOGBankClassic"
-            HookFrame(f)
-        end
-    end)
-    -- Window may already exist if the hook fires after first open.
-    local existing = TOGBankClassic_UI_Inventory.Window
-    if existing and existing.frame then
-        local f = existing.frame
-        _allowedObjects[f]     = true
-        _allowedObjectNames[f] = "TOGBankClassic"
-        HookFrame(f)
-    end
-end
-
-------------------------------------------------------------------------
--- ProfessionMaster hook
--- The professions window is created lazily inside professionsView:Show().
--- professionsView is only assigned at PLAYER_LOGIN, so the hook attempt
--- is retried from HookAllowedFrames until professionsView is available.
-------------------------------------------------------------------------
-local _professionMasterHooked = false
-HookProfessionMaster = function()
-    if _professionMasterHooked then return end
-    local pv = professionMaster and professionMaster.professionsView
-    if not pv then return end
-    _professionMasterHooked = true
-    hooksecurefunc(pv, "Show", function(self)
-        if self.view and not _allowedObjects[self.view] then
-            _allowedObjects[self.view]     = true
-            _allowedObjectNames[self.view] = "ProfessionMaster"
-            HookFrame(self.view)
-        end
-    end)
-    -- View may already exist if the hook fires after first open.
-    if pv.view then
-        _allowedObjects[pv.view]     = true
-        _allowedObjectNames[pv.view] = "ProfessionMaster"
-        HookFrame(pv.view)
-    end
+    TryAddonHooks()
 end
 
 -- Wire up initFrame now that HookAllowedFrames is defined.
@@ -577,9 +572,6 @@ initFrame:RegisterEvent("PLAYER_LOGIN")
 initFrame:SetScript("OnEvent", function(self, event, addonName)
     if event == "ADDON_LOADED" then
         HookAllowedFrames()
-        if addonName == "Grouper"          then HookGrouper() end
-        if addonName == "TOGBankClassic"   then HookTOGBankClassic() end
-        if addonName == "ProfessionMaster" then HookProfessionMaster() end
         -- ItemRackOptions is Load-on-Demand; re-hook + auto-tile when it loads
         -- so ItemRackOptFrame is picked up the moment it first exists.
         if addonName == "ItemRackOptions" then ScheduleAutoTile() end
@@ -591,9 +583,6 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
             SetBindingClick("CTRL-T", "TilerArrangeButton", "LeftButton")
         end
         HookAllowedFrames()
-        HookGrouper()           -- catches the case where Grouper loaded before Tiler
-        HookTOGBankClassic()
-        HookProfessionMaster()
         self:UnregisterEvent("PLAYER_LOGIN")
         -- Keep ADDON_LOADED registered so LoD addons (e.g. ItemRackOptions)
         -- that load after login still get their frames hooked.
