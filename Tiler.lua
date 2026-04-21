@@ -89,8 +89,9 @@ local ALLOWED_NAMES = {
 
 local function IsAllowed(name)
     if not name then return false end
+    if TilerDB.zones and TilerDB.zones[name] == "float" then return false end
     if ALLOWED_NAMES[name] then return true end
-    if TilerDB.allowed[name] then return true end
+    if TilerDB.allowed and TilerDB.allowed[name] then return true end
     return false
 end
 
@@ -824,12 +825,12 @@ SlashCmdList["TILER"] = function(msg)
             TilerDB.zones[name] = nil
             ScheduleAutoTile()
             print("|cff00ff00Tiler:|r " .. name .. " zone cleared (auto layout).")
-        elseif zone == "left" or zone == "center" or zone == "right" then
+        elseif zone == "left" or zone == "center" or zone == "right" or zone == "float" then
             TilerDB.zones[name] = zone
             ScheduleAutoTile()
-            print("|cff00ff00Tiler:|r " .. name .. " pinned to " .. zone .. ".")
+            print("|cff00ff00Tiler:|r " .. name .. " set to " .. zone .. ".")
         else
-            print("|cff00ff00Tiler:|r Zone must be left, center, or right.")
+            print("|cff00ff00Tiler:|r Zone must be left, center, right, or float.")
         end
 
     elseif cmd == "zones" then
