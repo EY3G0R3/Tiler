@@ -6,7 +6,7 @@
 -- rather than moving a large content frame, avoiding WoW's scroll-frame
 -- mouse-event bleed outside the clip rect.
 
-local WIN_W   = 510
+local WIN_W   = 660
 local WIN_H   = 650
 local PAD     = 12
 local ROW_H   = 24
@@ -19,22 +19,18 @@ local LIST_H   = WIN_H - LIST_TOP - FOOT_H     -- 402 px
 local NUM_VIS  = math.floor(LIST_H / ROW_H)    -- 16 fully-visible rows
 
 -- Column layout (x offsets relative to the list frame)
-local COL_NAME  = { x = 4,   w = 220 }
-local COL_SRC   = { x = 228, w = 46  }
-local COL_PRIO  = { x = 278, w = 68  }
-local COL_PLACE = { x = 350, w = 88  }
-local INNER_W   = COL_PLACE.x + COL_PLACE.w   -- 438
+local COL_NAME  = { x = 4,   w = 200 }
+local COL_SRC   = { x = 208, w = 44  }
+local COL_PRIO  = { x = 256, w = 62  }
+local COL_PLACE = { x = 322, w = 296 }
+local INNER_W   = COL_PLACE.x + COL_PLACE.w   -- 618
+
+local PLACE_OPTS = { "auto", "left", "center", "right", "float" }
+local BTN_GAP    = 2
+local BTN_W      = math.floor((COL_PLACE.w - (#PLACE_OPTS - 1) * BTN_GAP) / #PLACE_OPTS)  -- 57
 
 local SRC_COL   = { default = "|cff888888", user = "|cff44aaff", scan = "|cff666666" }
 
-local PLACE_CYCLE = { auto="left", left="center", center="right", right="float", float="auto" }
-local PLACE_LABEL = {
-    auto   = "|cff888888auto|r",
-    left   = "|cff44cc44left|r",
-    center = "|cffffff00center|r",
-    right  = "|cff44cc44right|r",
-    float  = "|cff555555float|r",
-}
 
 local function GetPlacement(d)
     local z = Tiler.GetZone(d.name)
@@ -208,10 +204,15 @@ local function NewRow(parent)
     eb:SetJustifyH("CENTER")
     row.prioEB = eb
 
-    local pb = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    pb:SetPoint("LEFT", row, "LEFT", COL_PLACE.x, 0)
-    pb:SetSize(COL_PLACE.w, ROW_H - 4)
-    row.placeBtn = pb
+    row.placeBtn = {}
+    for i, opt in ipairs(PLACE_OPTS) do
+        local b = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        b:SetPoint("LEFT", row, "LEFT", COL_PLACE.x + (i - 1) * (BTN_W + BTN_GAP), 0)
+        b:SetSize(BTN_W, ROW_H - 4)
+        b:SetText(opt)
+        row.placeBtn[i]   = b
+        row.placeBtn[opt] = b
+    end
 
     local function setHighlight(on)
         if not row._data or row._data._gap then return end
@@ -230,8 +231,10 @@ local function NewRow(parent)
     row:SetScript("OnLeave", onLeave)
     eb:SetScript("OnEnter",  function() setHighlight(true) end)
     eb:SetScript("OnLeave",  onLeave)
-    pb:SetScript("OnEnter",  function() setHighlight(true) end)
-    pb:SetScript("OnLeave",  onLeave)
+    for i = 1, #PLACE_OPTS do
+        row.placeBtn[i]:SetScript("OnEnter", function() setHighlight(true) end)
+        row.placeBtn[i]:SetScript("OnLeave", onLeave)
+    end
 
     return row
 end
@@ -250,13 +253,13 @@ local function UpdateRow(row, d, idx)
         row.nameFS:SetText("")
         row.srcFS:SetText("")
         row.prioEB:Hide()
-        row.placeBtn:Hide()
+        for i = 1, #PLACE_OPTS do row.placeBtn[i]:Hide() end
         return
     end
 
     row.divider:Hide()
     row.prioEB:Show()
-    row.placeBtn:Show()
+    for i = 1, #PLACE_OPTS do row.placeBtn[i]:Show() end
 
     local f   = d.frame
     local vis = f and f:IsShown()
@@ -297,15 +300,22 @@ local function UpdateRow(row, d, idx)
 
     local function refreshPlace()
         local p = GetPlacement(d)
-        row.placeBtn:SetText(PLACE_LABEL[p] or p)
+        for _, opt in ipairs(PLACE_OPTS) do
+            if p == opt then
+                row.placeBtn[opt]:GetFontString():SetTextColor(1, 0.82, 0, 1)
+            else
+                row.placeBtn[opt]:GetFontString():SetTextColor(0.4, 0.4, 0.4, 1)
+            end
+        end
     end
     refreshPlace()
-    row.placeBtn:SetScript("OnClick", function()
-        local cur  = GetPlacement(d)
-        local next = PLACE_CYCLE[cur] or "auto"
-        SetPlacement(d, next)
-        refreshPlace()
-    end)
+    for _, opt in ipairs(PLACE_OPTS) do
+        local captOpt = opt
+        row.placeBtn[captOpt]:SetScript("OnClick", function()
+            SetPlacement(d, captOpt)
+            refreshPlace()
+        end)
+    end
 
 end
 
@@ -459,13 +469,13 @@ local function Build()
     })
 
     TipBtn(COL_PLACE.x, COL_PLACE.w, "Placement", {
-        "Click to cycle placement mode.",
+        "Click a mode to apply it immediately.",
         " ",
-        "|cff888888auto|r   — tiled, no zone pin",
-        "|cff44cc44left|r   — pinned to left column",
-        "|cffffff00center|r — pinned to center column",
-        "|cff44cc44right|r  — pinned to right column",
-        "|cff555555float|r  — not tiled (floating, unmanaged)",
+        "auto   — tiled, layout engine decides position",
+        "left   — pinned to the left column",
+        "center — pinned to the center column",
+        "right  — pinned to the right column",
+        "float  — not tiled (window floats freely)",
     })
 
     -- Scrollbar (visible only when list overflows NUM_VIS rows)
