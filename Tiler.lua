@@ -14,6 +14,9 @@
 --   /tiler priority  <name> <n>     set sort priority (lower = further left; default 50)
 --   /tiler priority  <name>         clear explicit priority (reset to default)
 --   /tiler priorities               list all explicit priorities
+--   /tiler zone      <name> <zone>  pin a frame to left|center|right zone
+--   /tiler zone      <name>         clear zone pin (back to auto)
+--   /tiler zones                    list all zone assignments
 --   /tiler ui                       open the window manager UI
 
 local GAP         = 12    -- gap between windows (px)
@@ -93,6 +96,10 @@ end
 
 local function GetPriority(name)
     return (name and TilerDB.priorities and TilerDB.priorities[name]) or 50
+end
+
+local function GetZone(name)
+    return name and TilerDB.zones and TilerDB.zones[name]
 end
 
 ------------------------------------------------------------------------
@@ -213,7 +220,58 @@ local function ArrangeWindows(silent)
 
     local placements = {}
 
-    if #frames == 1 then
+    -- Zone-based layout: when any visible frame has a zone pin, arrange into columns.
+    local zGroups = { left = {}, center = {}, right = {}, auto = {} }
+    local anyZone = false
+    for _, f in ipairs(frames) do
+        local z = GetZone(f:GetName())
+        if z == "left" or z == "center" or z == "right" then
+            anyZone = true
+            zGroups[z][#zGroups[z]+1] = f
+        else
+            zGroups.auto[#zGroups.auto+1] = f
+        end
+    end
+
+    if anyZone then
+        -- Build ordered column list.  Auto frames merge into center when there is
+        -- no explicit center zone; otherwise auto becomes its own column between
+        -- left and center.
+        local cols = {}
+        if #zGroups.left > 0 then cols[#cols+1] = zGroups.left end
+        local mid = {}
+        for _, f in ipairs(zGroups.center) do mid[#mid+1] = f end
+        for _, f in ipairs(zGroups.auto)   do mid[#mid+1] = f end
+        if #mid > 0 then cols[#cols+1] = mid end
+        if #zGroups.right > 0 then cols[#cols+1] = zGroups.right end
+
+        -- Per-column max width; center the whole assembly on screen.
+        local colWidths = {}
+        for ci, col in ipairs(cols) do
+            local maxW = 0
+            for _, f in ipairs(col) do
+                local w = f:GetWidth() or 0
+                if w > maxW then maxW = w end
+            end
+            colWidths[ci] = maxW
+        end
+        local totalW = -GAP
+        for _, w in ipairs(colWidths) do totalW = totalW + w + GAP end
+        local curColX = math.max(LEFT_MARGIN, math.floor((sw - totalW) / 2))
+
+        for ci, col in ipairs(cols) do
+            local cw   = colWidths[ci]
+            local curY = sh - TOP_MARGIN
+            for _, f in ipairs(col) do
+                local fw = f:GetWidth() or 0
+                local x  = math.floor(curColX + (cw - fw) / 2)
+                placements[#placements+1] = { frame = f, x = x, y = curY }
+                curY = curY - (f:GetHeight() or 0) - GAP
+            end
+            curColX = curColX + cw + GAP
+        end
+
+    elseif #frames == 1 then
         -- Single window: center of left half of screen.
         local frame = frames[1]
         local fw, fh = frame:GetWidth() or 0, frame:GetHeight() or 0
@@ -390,6 +448,28 @@ local function PrintAllowList()
         for _, name in ipairs(user) do
             print("  " .. name)
         end
+    end
+end
+
+------------------------------------------------------------------------
+-- List zone assignments
+------------------------------------------------------------------------
+local function ListZones()
+    local list = {}
+    for name, z in pairs(TilerDB.zones or {}) do
+        list[#list + 1] = { name = name, zone = z }
+    end
+    if #list == 0 then
+        print("|cff00ff00Tiler:|r No zone assignments (all frames use auto layout).")
+        return
+    end
+    table.sort(list, function(a, b)
+        if a.zone ~= b.zone then return a.zone < b.zone end
+        return a.name < b.name
+    end)
+    print("|cff00ff00Tiler:|r " .. #list .. " zone assignment" .. (#list == 1 and "" or "s") .. ":")
+    for _, t in ipairs(list) do
+        print(string.format("  %-8s  %s", t.zone, t.name))
     end
 end
 
@@ -599,6 +679,7 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
         TilerDB = TilerDB or {}
         TilerDB.allowed     = TilerDB.allowed     or {}
         TilerDB.priorities  = TilerDB.priorities  or {}
+        TilerDB.zones       = TilerDB.zones       or {}
         if not GetBindingKey("CLICK TilerArrangeButton:LeftButton") then
             SetBindingClick("CTRL-T", "TilerArrangeButton", "LeftButton")
         end
@@ -662,6 +743,17 @@ Tiler = {
         if TilerDB.priorities then TilerDB.priorities[name] = nil end
         ScheduleAutoTile()
     end,
+    GetZone = GetZone,
+    SetZone = function(name, zone)
+        if not name then return end
+        TilerDB.zones[name] = zone
+        ScheduleAutoTile()
+    end,
+    ClearZone = function(name)
+        if not name then return end
+        if TilerDB.zones then TilerDB.zones[name] = nil end
+        ScheduleAutoTile()
+    end,
 }
 
 SLASH_TILER1 = "/tiler"
@@ -722,10 +814,31 @@ SlashCmdList["TILER"] = function(msg)
     elseif cmd == "priorities" then
         ListPriorities()
 
+    elseif cmd == "zone" then
+        local name, zone = arg:match("^(%S+)%s*(%S*)$")
+        name = name or ""
+        zone = (zone or ""):lower()
+        if name == "" then
+            ListZones()
+        elseif zone == "" then
+            TilerDB.zones[name] = nil
+            ScheduleAutoTile()
+            print("|cff00ff00Tiler:|r " .. name .. " zone cleared (auto layout).")
+        elseif zone == "left" or zone == "center" or zone == "right" then
+            TilerDB.zones[name] = zone
+            ScheduleAutoTile()
+            print("|cff00ff00Tiler:|r " .. name .. " pinned to " .. zone .. ".")
+        else
+            print("|cff00ff00Tiler:|r Zone must be left, center, or right.")
+        end
+
+    elseif cmd == "zones" then
+        ListZones()
+
     elseif cmd == "ui" then
         TilerUI.Toggle()
 
     else
-        print("|cff00ff00Tiler:|r /tiler · /tiler debug · /tiler scan · /tiler allow <name> · /tiler remove <name> · /tiler list · /tiler priority <name> [n] · /tiler priorities · /tiler ui")
+        print("|cff00ff00Tiler:|r /tiler · /tiler debug · /tiler scan · /tiler allow <name> · /tiler remove <name> · /tiler list · /tiler priority <name> [n] · /tiler priorities · /tiler zone <name> [left|center|right] · /tiler zones · /tiler ui")
     end
 end
