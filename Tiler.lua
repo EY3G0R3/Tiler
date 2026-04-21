@@ -111,17 +111,15 @@ end
 
 local function DiscoverFrames()
     local frames = {}
-    local seen   = {}
+    -- Only walk direct UIParent children.  Do NOT add a second pass over
+    -- _allowedObjects to catch non-UIParent-child frames: ElvUI/ToxiUI
+    -- reparents some standard frames (e.g. GuildFrame → ElvUIParent), and
+    -- tiling those frames breaks their child-element layout because ElvUI
+    -- anchors its UI widgets to absolute screen positions set at show-time.
+    -- All current addon hook targets (AceGUI windows, etc.) are UIParent
+    -- children and are found here via the _allowedObjects check in TryAddFrame.
     for _, f in ipairs({ UIParent:GetChildren() }) do
-        seen[f] = true
         pcall(TryAddFrame, frames, f)
-    end
-    -- Second pass: allowed frames that aren't direct UIParent children
-    -- (e.g. ItemRackOptFrame, which has no explicit parent= in its XML).
-    for f in pairs(_allowedObjects) do
-        if not seen[f] then
-            pcall(TryAddFrame, frames, f)
-        end
     end
     -- Sort by explicit priority first; ties fall back to current visual order.
     table.sort(frames, function(a, b)
