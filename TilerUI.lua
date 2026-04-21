@@ -6,7 +6,7 @@
 -- rather than moving a large content frame, avoiding WoW's scroll-frame
 -- mouse-event bleed outside the clip rect.
 
-local WIN_W   = 490
+local WIN_W   = 560
 local WIN_H   = 650
 local PAD     = 12
 local ROW_H   = 24
@@ -22,12 +22,21 @@ local NUM_VIS  = math.floor(LIST_H / ROW_H)    -- 16 fully-visible rows
 local COL_NAME  = { x = 4,   w = 234 }
 local COL_SRC   = { x = 242, w = 50  }
 local COL_ALLOW = { x = 296, w = 72  }
-local COL_PRIO  = { x = 372, w = 70 }
-local INNER_W   = COL_PRIO.x + COL_PRIO.w     -- 442
+local COL_PRIO  = { x = 372, w = 70  }
+local COL_ZONE  = { x = 446, w = 72  }
+local INNER_W   = COL_ZONE.x + COL_ZONE.w     -- 518
 
 local SRC_COL   = { default = "|cff888888", user = "|cff44aaff", scan = "|cff666666" }
 local CHECK_TEX = "|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t"
 local CROSS_TEX = "|TInterface\\RaidFrame\\ReadyCheck-NotReady:14:14|t"
+
+local ZONE_CYCLE = { [false] = "left", left = "center", center = "right", right = false }
+local ZONE_LABEL = {
+    left   = "|cff44cc44◀ left|r",
+    center = "|cffffff00● ctr|r",
+    right  = "|cff44cc44right ▶|r",
+}
+local function ZoneLabel(z) return ZONE_LABEL[z] or "|cff555555  —  |r" end
 
 ------------------------------------------------------------------------
 -- Module state
@@ -174,6 +183,11 @@ local function NewRow(parent)
     eb:SetJustifyH("CENTER")
     row.prioEB = eb
 
+    local zb = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    zb:SetPoint("LEFT", row, "LEFT", COL_ZONE.x, 0)
+    zb:SetSize(COL_ZONE.w, ROW_H - 4)
+    row.zoneBtn = zb
+
     local function setHighlight(on)
         if not row._data or row._data._gap then return end
         if on then
@@ -193,6 +207,8 @@ local function NewRow(parent)
     ab:SetScript("OnLeave",  onLeave)
     eb:SetScript("OnEnter",  function() setHighlight(true) end)
     eb:SetScript("OnLeave",  onLeave)
+    zb:SetScript("OnEnter",  function() setHighlight(true) end)
+    zb:SetScript("OnLeave",  onLeave)
 
     return row
 end
@@ -212,6 +228,7 @@ local function UpdateRow(row, d, idx)
         row.srcFS:SetText("")
         row.allowBtn:Hide()
         row.prioEB:Hide()
+        row.zoneBtn:Hide()
         return
     end
 
@@ -276,6 +293,29 @@ local function UpdateRow(row, d, idx)
         self:ClearFocus()
         refreshPrio()
     end)
+
+    -- Zone button: only shown for tiled frames; cycles none→left→center→right→none
+    local isTiled = d.source == "default" or d.allowed
+    if isTiled then
+        row.zoneBtn:Show()
+        local function refreshZone()
+            local z = Tiler.GetZone(d.name)
+            row.zoneBtn:SetText(ZoneLabel(z))
+        end
+        refreshZone()
+        row.zoneBtn:SetScript("OnClick", function()
+            local cur  = Tiler.GetZone(d.name)
+            local next = ZONE_CYCLE[cur or false]
+            if next then
+                Tiler.SetZone(d.name, next)
+            else
+                Tiler.ClearZone(d.name)
+            end
+            refreshZone()
+        end)
+    else
+        row.zoneBtn:Hide()
+    end
 
 end
 
@@ -377,6 +417,7 @@ local function Build()
     Hdr("Source",   COL_SRC.x,   COL_SRC.w,   "CENTER")
     Hdr("Tile",     COL_ALLOW.x, COL_ALLOW.w, "CENTER")
     Hdr("Priority", COL_PRIO.x,  COL_PRIO.w,  "CENTER")
+    Hdr("Zone",     COL_ZONE.x,  COL_ZONE.w,  "CENTER")
 
     -- Divider under headers
     local div = win:CreateTexture(nil, "ARTWORK")
@@ -419,6 +460,26 @@ local function Build()
         GameTooltip:Show()
     end)
     prioTipBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Zone column tooltip
+    local zoneTipBtn = CreateFrame("Button", nil, win)
+    zoneTipBtn:SetPoint("TOPLEFT", win, "TOPLEFT", PAD + COL_ZONE.x, -(TITLE_H + 2))
+    zoneTipBtn:SetSize(COL_ZONE.w, HDR_H)
+    zoneTipBtn:EnableMouse(true)
+    zoneTipBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Zone")
+        GameTooltip:AddLine("Pins a frame to a screen column.", 1, 1, 1, true)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("|cff44cc44◀ left|r   — leftmost column", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffff00● ctr|r    — center column", 1, 1, 1, true)
+        GameTooltip:AddLine("|cff44cc44right ▶|r  — rightmost column", 1, 1, 1, true)
+        GameTooltip:AddLine("|cff555555—|r        — auto (no pin)", 1, 1, 1, true)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Click to cycle. Takes effect on next tile.", 0.7, 0.7, 0.7, true)
+        GameTooltip:Show()
+    end)
+    zoneTipBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Scrollbar (visible only when list overflows NUM_VIS rows)
     local SB_W = 14
