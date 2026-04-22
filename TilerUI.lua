@@ -26,8 +26,8 @@ local COL_PLACE = { x = 392, w = 296 }
 local INNER_W   = COL_PLACE.x + COL_PLACE.w   -- 688
 
 local PLACE_OPTS = { "auto", "left", "center", "right", "float" }
-local BTN_GAP    = 2
-local BTN_W      = math.floor((COL_PLACE.w - (#PLACE_OPTS - 1) * BTN_GAP) / #PLACE_OPTS)  -- 57
+local BTN_GAPS   = { 8, 1, 1, 8 }   -- gaps after buttons 1-4 (auto|left-center-right|float)
+local BTN_W      = math.floor((COL_PLACE.w - (8+1+1+8)) / #PLACE_OPTS)  -- 55
 
 local SRC_COL   = { default = "|cff888888", user = "|cff44aaff", scan = "|cff666666" }
 
@@ -205,13 +205,15 @@ local function NewRow(parent)
     row.prioEB = eb
 
     row.placeBtn = {}
+    local btx = COL_PLACE.x
     for i, opt in ipairs(PLACE_OPTS) do
         local b = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        b:SetPoint("LEFT", row, "LEFT", COL_PLACE.x + (i - 1) * (BTN_W + BTN_GAP), 0)
+        b:SetPoint("LEFT", row, "LEFT", btx, 0)
         b:SetSize(BTN_W, ROW_H - 4)
         b:SetText(opt)
         row.placeBtn[i]   = b
         row.placeBtn[opt] = b
+        btx = btx + BTN_W + (BTN_GAPS[i] or 0)
     end
 
     local function setHighlight(on)
