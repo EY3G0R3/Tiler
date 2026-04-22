@@ -19,15 +19,16 @@ local LIST_H   = WIN_H - LIST_TOP - FOOT_H     -- 402 px
 local NUM_VIS  = math.floor(LIST_H / ROW_H)    -- 16 fully-visible rows
 
 -- Column layout (x offsets relative to the list frame)
-local COL_NAME  = { x = 4,   w = 270 }
-local COL_SRC   = { x = 278, w = 58  }
-local COL_PRIO  = { x = 340, w = 62  }
-local COL_PLACE = { x = 406, w = 296 }
-local INNER_W   = COL_PLACE.x + COL_PLACE.w   -- 702
+local COL_NAME  = { x = 4,   w = 350 }
+local COL_SRC   = { x = 358, w = 58  }
+local COL_PRIO  = { x = 420, w = 62  }
+local COL_PLACE = { x = 486, w = 212 }
+local INNER_W   = COL_PLACE.x + COL_PLACE.w   -- 698
 
-local PLACE_OPTS = { "auto", "left", "center", "right", "float" }
-local BTN_GAPS   = { 8, 1, 1, 8 }   -- gaps after buttons 1-4 (auto|left-center-right|float)
-local BTN_W      = math.floor((COL_PLACE.w - (8+1+1+8)) / #PLACE_OPTS)  -- 55
+local PLACE_OPTS   = { "auto", "left", "center", "right", "float" }
+local PLACE_LABELS = { auto="auto", left="<", center="", right=">", float="float" }
+local PLACE_WIDTHS = { 55, 26, 30, 26, 55 }
+local BTN_GAPS     = { 8, 1, 1, 8 }
 
 local SRC_COL   = { default = "|cff888888", user = "|cff44aaff", scan = "|cff666666" }
 
@@ -209,11 +210,21 @@ local function NewRow(parent)
     for i, opt in ipairs(PLACE_OPTS) do
         local b = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
         b:SetPoint("LEFT", row, "LEFT", btx, 0)
-        b:SetSize(BTN_W, ROW_H - 4)
-        b:SetText(opt)
+        b:SetSize(PLACE_WIDTHS[i], ROW_H - 4)
+        b:SetText(PLACE_LABELS[opt])
+        if opt == "center" then
+            local host = CreateFrame("Frame", nil, b)
+            host:SetAllPoints(b)
+            host:SetFrameLevel(b:GetFrameLevel() + 2)
+            local dot = host:CreateTexture(nil, "OVERLAY")
+            dot:SetColorTexture(0.4, 0.4, 0.4, 1)
+            dot:SetSize(8, 8)
+            dot:SetPoint("CENTER", host, "CENTER", 0, 0)
+            b._dot = dot
+        end
         row.placeBtn[i]   = b
         row.placeBtn[opt] = b
-        btx = btx + BTN_W + (BTN_GAPS[i] or 0)
+        btx = btx + PLACE_WIDTHS[i] + (BTN_GAPS[i] or 0)
     end
 
     local function setHighlight(on)
@@ -303,10 +314,16 @@ local function UpdateRow(row, d, idx)
     local function refreshPlace()
         local p = GetPlacement(d)
         for _, opt in ipairs(PLACE_OPTS) do
-            if p == opt then
-                row.placeBtn[opt]:GetFontString():SetTextColor(1, 0.82, 0, 1)
+            local b      = row.placeBtn[opt]
+            local active = (p == opt)
+            if b._dot then
+                if active then
+                    b._dot:SetColorTexture(1, 0.82, 0, 1)
+                else
+                    b._dot:SetColorTexture(0.4, 0.4, 0.4, 1)
+                end
             else
-                row.placeBtn[opt]:GetFontString():SetTextColor(0.4, 0.4, 0.4, 1)
+                b:GetFontString():SetTextColor(active and 1 or 0.4, active and 0.82 or 0.4, active and 0 or 0.4, 1)
             end
         end
     end
@@ -473,11 +490,11 @@ local function Build()
     TipBtn(COL_PLACE.x, COL_PLACE.w, "Placement", {
         "Click a mode to apply it immediately.",
         " ",
-        "auto   — tiled, layout engine decides position",
-        "left   — pinned to the left column",
-        "center — pinned to the center column",
-        "right  — pinned to the right column",
-        "float  — not tiled (window floats freely)",
+        "auto  — tiled, layout engine decides position",
+        "<     — pinned to the left column",
+        "*     — pinned to the center column",
+        ">     — pinned to the right column",
+        "float — not tiled (window floats freely)",
     })
 
     -- Scrollbar (visible only when list overflows NUM_VIS rows)
