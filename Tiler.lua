@@ -235,41 +235,31 @@ local function ArrangeWindows(silent)
     end
 
     if anyZone then
-        -- Build ordered column list.  Auto frames merge into center when there is
-        -- no explicit center zone; otherwise auto becomes its own column between
-        -- left and center.
-        local cols = {}
-        if #zGroups.left > 0 then cols[#cols+1] = zGroups.left end
-        local mid = {}
-        for _, f in ipairs(zGroups.center) do mid[#mid+1] = f end
-        for _, f in ipairs(zGroups.auto)   do mid[#mid+1] = f end
-        if #mid > 0 then cols[#cols+1] = mid end
-        if #zGroups.right > 0 then cols[#cols+1] = zGroups.right end
+        -- Fixed screen thirds: left=[0,sw/3], center=[sw/3,2sw/3], right=[2sw/3,sw].
+        -- Auto frames go into center. Within each band, frames are side-by-side.
+        local bandFrames = { left = {}, center = {}, right = {} }
+        for _, f in ipairs(zGroups.left)   do bandFrames.left[#bandFrames.left+1]     = f end
+        for _, f in ipairs(zGroups.center) do bandFrames.center[#bandFrames.center+1] = f end
+        for _, f in ipairs(zGroups.auto)   do bandFrames.center[#bandFrames.center+1] = f end
+        for _, f in ipairs(zGroups.right)  do bandFrames.right[#bandFrames.right+1]   = f end
 
-        -- Per-column max width; center the whole assembly on screen.
-        local colWidths = {}
-        for ci, col in ipairs(cols) do
-            local maxW = 0
-            for _, f in ipairs(col) do
-                local w = f:GetWidth() or 0
-                if w > maxW then maxW = w end
-            end
-            colWidths[ci] = maxW
-        end
-        local totalW = -GAP
-        for _, w in ipairs(colWidths) do totalW = totalW + w + GAP end
-        local curColX = math.max(LEFT_MARGIN, math.floor((sw - totalW) / 2))
+        local bandW = math.floor(sw / 3)
+        local bandStartX = { left = 0, center = bandW, right = 2 * bandW }
 
-        for ci, col in ipairs(cols) do
-            local cw   = colWidths[ci]
-            local curY = sh - TOP_MARGIN
-            for _, f in ipairs(col) do
-                local fw = f:GetWidth() or 0
-                local x  = math.floor(curColX + (cw - fw) / 2)
-                placements[#placements+1] = { frame = f, x = x, y = curY }
-                curY = curY - (f:GetHeight() or 0) - GAP
+        for _, zoneName in ipairs({ "left", "center", "right" }) do
+            local bframes = bandFrames[zoneName]
+            if #bframes > 0 then
+                local bStart = bandStartX[zoneName]
+                local totalW = -GAP
+                for _, f in ipairs(bframes) do totalW = totalW + (f:GetWidth() or 0) + GAP end
+                local curX = bStart + math.floor((bandW - totalW) / 2)
+                if zoneName == "left" then curX = math.max(LEFT_MARGIN, curX) end
+                local curY = sh - TOP_MARGIN
+                for _, f in ipairs(bframes) do
+                    placements[#placements+1] = { frame = f, x = curX, y = curY }
+                    curX = curX + (f:GetWidth() or 0) + GAP
+                end
             end
-            curColX = curColX + cw + GAP
         end
 
     elseif #frames == 1 then
