@@ -6,7 +6,7 @@
 -- rather than moving a large content frame, avoiding WoW's scroll-frame
 -- mouse-event bleed outside the clip rect.
 
-local WIN_W   = 750
+local WIN_W   = 760
 local WIN_H   = 650
 local PAD     = 12
 local ROW_H   = 24
@@ -22,7 +22,7 @@ local NUM_VIS  = math.floor(LIST_H / ROW_H)    -- 16 fully-visible rows
 local COL_NAME  = { x = 4,   w = 350 }
 local COL_SRC   = { x = 358, w = 58  }
 local COL_PRIO  = { x = 420, w = 62  }
-local COL_PLACE = { x = 486, w = 212 }
+local COL_PLACE = { x = 498, w = 212 }
 local INNER_W   = COL_PLACE.x + COL_PLACE.w   -- 698
 
 local PLACE_OPTS   = { "auto", "left", "center", "right", "float" }
