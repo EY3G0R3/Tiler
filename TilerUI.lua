@@ -20,10 +20,10 @@ local NUM_VIS  = math.floor(LIST_H / ROW_H)    -- 16 fully-visible rows
 
 -- Column layout (x offsets relative to the list frame)
 local COL_NAME  = { x = 4,   w = 270 }
-local COL_SRC   = { x = 278, w = 44  }
-local COL_PRIO  = { x = 326, w = 62  }
-local COL_PLACE = { x = 392, w = 296 }
-local INNER_W   = COL_PLACE.x + COL_PLACE.w   -- 688
+local COL_SRC   = { x = 278, w = 58  }
+local COL_PRIO  = { x = 340, w = 62  }
+local COL_PLACE = { x = 406, w = 296 }
+local INNER_W   = COL_PLACE.x + COL_PLACE.w   -- 702
 
 local PLACE_OPTS = { "auto", "left", "center", "right", "float" }
 local BTN_GAPS   = { 8, 1, 1, 8 }   -- gaps after buttons 1-4 (auto|left-center-right|float)
