@@ -254,9 +254,9 @@ local function ArrangeWindows(silent)
                 for _, f in ipairs(bframes) do totalW = totalW + (f:GetWidth() or 0) + GAP end
                 local curX = bStart + math.floor((bandW - totalW) / 2)
                 if zoneName == "left" then curX = math.max(LEFT_MARGIN, curX) end
-                local curY = sh - TOP_MARGIN
                 for _, f in ipairs(bframes) do
-                    placements[#placements+1] = { frame = f, x = curX, y = curY }
+                    local y = math.floor(sh / 2 + (f:GetHeight() or 0) / 2)
+                    placements[#placements+1] = { frame = f, x = curX, y = y }
                     curX = curX + (f:GetWidth() or 0) + GAP
                 end
             end
