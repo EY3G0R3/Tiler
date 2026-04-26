@@ -89,10 +89,13 @@ local ALLOWED_NAMES = {
 
 local function IsAllowed(name)
     if not name then return false end
-    if TilerDB.zones and TilerDB.zones[name] == "float" then return false end
     if ALLOWED_NAMES[name] then return true end
     if TilerDB.allowed and TilerDB.allowed[name] then return true end
     return false
+end
+
+local function IsFloat(name)
+    return name and TilerDB.zones and TilerDB.zones[name] == "float"
 end
 
 local function GetPriority(name)
@@ -107,8 +110,10 @@ end
 -- Frame discovery
 ------------------------------------------------------------------------
 local function TryAddFrame(frames, f)
+    local name = f:GetName()
+    if IsFloat(name) then return end
     if f:IsVisible()
-    and (IsAllowed(f:GetName()) or _allowedObjects[f])
+    and (IsAllowed(name) or _allowedObjects[f])
     and (f:GetWidth()  or 0) >= MIN_WIDTH
     and (f:GetHeight() or 0) >= MIN_HEIGHT
     and f:GetLeft()
@@ -678,6 +683,23 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
         self:UnregisterEvent("PLAYER_LOGIN")
         -- Keep ADDON_LOADED registered so LoD addons (e.g. ItemRackOptions)
         -- that load after login still get their frames hooked.
+        -- NPC-interaction windows (MailFrame, MerchantFrame, BankFrame, etc.)
+        -- are lazily created on first use, so they aren't in _G at login and
+        -- never get an OnShow hook.  Listen for the events that fire when each
+        -- window first appears so we can hook and tile them immediately.
+        self:RegisterEvent("MAIL_SHOW")
+        self:RegisterEvent("MERCHANT_SHOW")
+        self:RegisterEvent("BANKFRAME_OPENED")
+        self:RegisterEvent("TRADE_SHOW")
+        self:RegisterEvent("AUCTION_HOUSE_SHOW")
+        self:RegisterEvent("CRAFT_SHOW")
+        self:RegisterEvent("TRADE_SKILL_SHOW")
+        self:RegisterEvent("PET_STABLE_SHOW")
+    else
+        -- One of the NPC window events fired; hook any newly-created allowed
+        -- frame and schedule a re-tile.
+        HookAllowedFrames()
+        ScheduleAutoTile()
     end
 end)
 
