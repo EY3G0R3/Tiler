@@ -71,6 +71,7 @@ local ALLOWED_NAMES = {
     TradeFrame            = true,
     BankFrame             = true,
     PetStableFrame        = true,
+    ClassTrainerFrame     = true,
     MailFrame             = true,
     MerchantFrame         = true,
     TaxiFrame             = true,
@@ -116,7 +117,6 @@ local function TryAddFrame(frames, f)
     and (IsAllowed(name) or _allowedObjects[f])
     and (f:GetWidth()  or 0) >= MIN_WIDTH
     and (f:GetHeight() or 0) >= MIN_HEIGHT
-    and f:GetLeft()
     then
         frames[#frames + 1] = f
     end
@@ -695,11 +695,21 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
         self:RegisterEvent("CRAFT_SHOW")
         self:RegisterEvent("TRADE_SKILL_SHOW")
         self:RegisterEvent("PET_STABLE_SHOW")
+        self:RegisterEvent("TRAINER_SHOW")
     else
         -- One of the NPC window events fired; hook any newly-created allowed
         -- frame and schedule a re-tile.
         HookAllowedFrames()
         ScheduleAutoTile()
+        -- Bag addons with ElvUI skins (e.g. Baganator) may create or position
+        -- their bank view frame asynchronously via C_Timer after BANKFRAME_OPENED.
+        -- A deferred second pass catches frames that missed the immediate tile.
+        if event == "BANKFRAME_OPENED" then
+            C_Timer.After(0.25, function()
+                HookAllowedFrames()
+                ScheduleAutoTile()
+            end)
+        end
     end
 end)
 
