@@ -701,14 +701,18 @@ initFrame:SetScript("OnEvent", function(self, event, addonName)
         -- frame and schedule a re-tile.
         HookAllowedFrames()
         ScheduleAutoTile()
-        -- Bag addons with ElvUI skins (e.g. Baganator) may create or position
-        -- their bank view frame asynchronously via C_Timer after BANKFRAME_OPENED.
-        -- A deferred second pass catches frames that missed the immediate tile.
+        -- Bag addons with ElvUI skins (e.g. Baganator) may create both the bank
+        -- and backpack frames asynchronously after BANKFRAME_OPENED — sometimes
+        -- more than 0.25 s later.  Multiple deferred passes ensure both frames
+        -- are hooked and tiled once they exist and are visible.
         if event == "BANKFRAME_OPENED" then
-            C_Timer.After(0.25, function()
+            local function deferredTile()
                 HookAllowedFrames()
                 ScheduleAutoTile()
-            end)
+            end
+            C_Timer.After(0.25, deferredTile)
+            C_Timer.After(0.75, deferredTile)
+            C_Timer.After(1.50, deferredTile)
         end
     end
 end)
