@@ -2,7 +2,8 @@
 ## Title: Tiler
 ## Notes: Tiling window manager — /tiler arranges all open windows side by side.
 ## Author:
-## Version: 0.1.0
+## Version: @project-version@
+## X-Curse-Project-ID: 1513776
 ## DefaultState: enabled
 ## SavedVariables: TilerDB
 
